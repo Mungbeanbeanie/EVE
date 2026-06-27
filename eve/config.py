@@ -54,9 +54,9 @@ class Config(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_token_path: str = "./.secrets/google_token.json"
-    microsoft_client_id: str | None = None
-    microsoft_tenant_id: str = "common"  # "common" | "organizations" | a tenant GUID
-    microsoft_token_cache_path: str = "./.secrets/microsoft_token.json"
+    # Web search (Tavily). Get a free key at https://app.tavily.com. The web_search
+    # tool is registered unconditionally; it only errors if called without a key.
+    tavily_api_key: str | None = None
 
     # ── Misc ─────────────────────────────────────────────────────────────────
     log_level: str = "INFO"

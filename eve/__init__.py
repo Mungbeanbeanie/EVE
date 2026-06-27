@@ -8,7 +8,7 @@ only on the abstract interfaces, never the concrete implementations):
     eve.pipeline        # voice I/O: audio capture, VAD, STT, TTS
     eve.llm             # provider-agnostic LLM client + factory
     eve.memory          # working + procedural + episodic memory
-    eve.tools           # tool registry/executor + Google/Microsoft adapters
+    eve.tools           # tool registry/executor + Google & web-search adapters
     eve.utils           # logging and shared helpers
 """
 

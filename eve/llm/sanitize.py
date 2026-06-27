@@ -31,7 +31,7 @@ def injection_detected(text: str) -> bool:
     return any(re.search(injection, text, re.IGNORECASE) 
                for injection in Injections)
 
-def handle_injection(text: str, mode: str = "refuse") -> str | None:
+def handle_injection(text: str, mode: str = "refuse") -> str:
 
     # Redact - leave the harmful part out but use the rest of text
 
@@ -60,13 +60,13 @@ def sanitize(text: str, injection_mode: str = "refuse") -> str:
     text = re.sub(r"[\x00-\x1F\x7F]", "", text) #Strips the control characters from the ASCII range (0-31 and 127)
     text = re.sub(r"\s+", " ", text).strip() # Collapses whitespace
 
-    max_chars = 250 #Around 40 to 50 words
-    text = text[:max_chars] #Limit to 250 chars by slicing whats needed from the text (even if a lot was said by the user)
-
+    # Detect on the FULL text before truncating, so an injection phrase that begins
+    # past the char limit can't slip through by being sliced off.
     if injection_detected(text):
         return handle_injection(text, mode=injection_mode)
 
-    return text
+    max_chars = 250 #Around 40 to 50 words
+    return text[:max_chars] #Limit to 250 chars (even if the user said a lot more)
 
 def summarize(tool_name: str, args: dict) -> str:
     match tool_name:

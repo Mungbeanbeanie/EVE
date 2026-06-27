@@ -17,8 +17,10 @@ class WorkingMemory:
     """A bounded rolling buffer of recent chat messages."""
 
     def __init__(self, max_turns: int = 20, system_prompt: str | None = None) -> None:
-        # Each entry is a chat Message dict: {"role": ..., "content": ...}
-        self._buffer: deque[Message] = deque(maxlen=max_turns)
+        # Each entry is a chat Message dict: {"role": ..., "content": ...}. A "turn"
+        # is a user message + an assistant reply, so the buffer holds 2× max_turns
+        # messages to actually retain the last `max_turns` exchanges.
+        self._buffer: deque[Message] = deque(maxlen=max_turns * 2)
         self.system_prompt = system_prompt or "You are EVE, a friend and informal personal assistant."
 
     # ── Writes (plumbing — implemented) ──────────────────────────────────────

@@ -44,7 +44,13 @@ class LiteLLMClient(LLMClient):
             )
             msg = resp.choices[0].message
             if not msg.tool_calls:
-                return msg.content
+                # A model that only called tools can return content=None; never
+                # hand None back to the caller (it speaks/stores the reply as text).
+                return msg.content or ""
+            # The assistant message carrying the tool_calls MUST be appended before
+            # the tool results — providers reject a 'tool' message that isn't
+            # immediately preceded by the matching assistant tool_calls message.
+            messages.append(msg.model_dump())
             for call in msg.tool_calls:
                 result = await executor.run(call.function.name, call.function.arguments)
                 messages.append(Message(role="tool", content=str(result), tool_call_id=call.id))

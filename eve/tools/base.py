@@ -42,7 +42,7 @@ class Tool:
 class ToolAdapter(ABC):
     """Groups related tools for one service and owns its auth/session.
 
-    Concrete adapters (GoogleAdapter, MicrosoftAdapter) build their Tool objects
+    Concrete adapters (GoogleAdapter, WebSearchAdapter) build their Tool objects
     and register them into the shared ToolRegistry.
     """
 

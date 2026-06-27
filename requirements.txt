@@ -30,11 +30,11 @@ psycopg[binary,pool]>=3.1
 pgvector>=0.2.5
 numpy>=1.26
 
-# Tools — Google first (Microsoft adapter is stubbed)
+# Tools — Google (Gmail / Calendar / Drive) + Tavily web search
 google-api-python-client>=2.120
 google-auth>=2.29
 google-auth-oauthlib>=1.2
-msal>=1.28           # Microsoft Graph auth (adapter scaffolded for later)
+requests>=2.31       # HTTP for the Tavily web-search adapter
 
 # ─── Dev / test ──────────────────────────────────────────────────────────────
 pytest>=8.0

@@ -18,12 +18,15 @@ more accurate). On CPU, compute_type="int8" gives the best speed.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import numpy as np
 
 from faster_whisper import WhisperModel
 from eve.config import Config
 from eve.pipeline.base import STTEngine
+
+log = logging.getLogger(__name__)
 
 
 class WhisperSTT(STTEngine):
@@ -55,7 +58,7 @@ class WhisperSTT(STTEngine):
             segments, info = self._model.transcribe(samples, language="en")
             text = " ".join(seg.text for seg in segments).strip()
             elapsed = time.perf_counter() - start
-            print(f"Transcription took {elapsed:.2f}s")
+            log.debug("Transcription took %.2fs", elapsed)
             return text
     
         return await asyncio.to_thread(transcribe)

@@ -26,7 +26,7 @@ from eve.pipeline.tts import Pyttsx3TTS
 from eve.tools.executor import ToolExecutor
 from eve.tools.registry import ToolRegistry
 from eve.tools.adapters.google import GoogleAdapter
-from eve.tools.adapters.microsoft import MicrosoftAdapter
+from eve.tools.adapters.websearch import WebSearchAdapter
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class Agent:
         memory = MemoryManager.from_config(config)
         tools = ToolRegistry()
         GoogleAdapter(config).register_into(tools)
-        MicrosoftAdapter(config).register_into(tools)
+        WebSearchAdapter(config).register_into(tools)
         executor = ToolExecutor(registry=tools)
 
         return cls(
@@ -173,6 +173,15 @@ class Agent:
         except NotImplementedError as exc:
             log.warning("Not implemented yet → %s", exc)
             print(f"[EVE stub] {exc}")
+        except Exception as exc:
+            # One bad turn (network blip, tool error, runaway loop) must not kill the
+            # session — log it, tell the user, and return to listening.
+            log.exception("Turn failed")
+            message = "Sorry, something went wrong handling that. Please try again."
+            if speak:
+                await self.tts.speak(message)
+            else:
+                print(f"eve > {message}  ({type(exc).__name__}: {exc})")
 
     # ── Destructive-action confirmation ───────────────────────────────────────
     # Word-level matches (not substrings) so "now"/"know" don't read as "no".

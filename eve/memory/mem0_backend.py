@@ -65,12 +65,10 @@ class Mem0Backend:
 
         # mem0's native provider clients (groq, anthropic, openai, ...) want the
         # *bare* model name — the "provider/model" form (e.g. "groq/llama-3.3...")
-        # is a LiteLLM-only convention. Strip a leading "<provider>/" so mem0's
-        # fact-extraction LLM call doesn't 404.
-        model = self._config.llm_model
-        prefix = f"{self._config.llm_provider}/"
-        if model.startswith(prefix):
-            model = model[len(prefix):]
+        # is a LiteLLM-only convention. Strip the leading "<provider>/" segment from
+        # the model string itself (not from llm_provider, which can disagree with the
+        # actual prefix and would then leave it un-stripped → mem0 404s).
+        model = self._config.llm_model.split("/", 1)[-1]
 
         llm_cfg: dict = {
             "model": model,
