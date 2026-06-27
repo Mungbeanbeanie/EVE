@@ -46,9 +46,16 @@ class Config(BaseSettings):
     tts_voice: str | None = None
 
     # ── Voice input mode ─────────────────────────────────────────────────────
-    # "vad" = always-listening, auto-segmented by silence detection.
-    # "ptt" = push-to-talk: press Enter to start/stop each utterance (no echo).
+    # "vad"  = always-listening, auto-segmented by silence detection.
+    # "ptt"  = push-to-talk: press Enter to start/stop each utterance (no echo).
+    # "wake" = idle until the wake word is heard, then capture the command.
     voice_input: str = "vad"
+
+    # ── Wake word (only used when voice_input="wake") ────────────────────────
+    # A built-in openWakeWord name (alexa | hey_jarvis | hey_mycroft | hey_rhasspy)
+    # or a path to a custom .onnx/.tflite model trained for "Hey EVE".
+    wake_word: str = "hey_jarvis"
+    wake_threshold: float = 0.5  # detection score (0..1); raise to reduce false wakes
 
     # ── Tools ────────────────────────────────────────────────────────────────
     google_client_id: str | None = None

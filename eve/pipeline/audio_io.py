@@ -16,6 +16,7 @@ import pyaudio
 from eve.config import Config
 from eve.pipeline.base import AudioIO
 from eve.pipeline.vad import VoiceActivityDetector
+from eve.pipeline.wake import WakeWordDetector
 
 
 SAMPLE_RATE = 16_000  # 16 kHz: the rate webrtcvad and Whisper both expect (see base.py)
@@ -34,6 +35,12 @@ class PyAudioIO(AudioIO):
         self.config = config
         self.sample_rate = SAMPLE_RATE
         self.vad = VoiceActivityDetector(sample_rate=SAMPLE_RATE)
+        # Built lazily-loadable: the model only loads if wake mode is actually used.
+        self.wake = WakeWordDetector(
+            wake_word=config.wake_word,
+            threshold=config.wake_threshold,
+            sample_rate=SAMPLE_RATE,
+        )
         self._pa = pyaudio.PyAudio()
 
     async def record_utterance(self) -> bytes:
@@ -123,6 +130,43 @@ class PyAudioIO(AudioIO):
         stop.set()
         await asyncio.to_thread(worker.join)
         return b"".join(frames)
+
+    async def record_with_wake_word(self) -> bytes:
+        """Idle until the wake word is heard, then capture the spoken command.
+
+        Two-phase, like Alexa/"Hey Google": stream short frames through the wake
+        detector until it fires, then hand off to the normal VAD capture for the
+        actual request. record_utterance() reopens the stream with its own settle
+        flush, so the wake-listen stream is fully closed before the command is
+        recorded — no double-open of the input device.
+        """
+        def await_wake_blocking() -> None:
+            frame_samples = self.wake.frame_samples
+            stream = self._pa.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=self.sample_rate,
+                input=True,
+                frames_per_buffer=frame_samples,
+            )
+            # Drop the tail of EVE's own TTS (and any backlog) so she can't wake
+            # herself, then start the detector from a clean rolling buffer.
+            settle_deadline = time.monotonic() + SETTLE_SECONDS
+            while time.monotonic() < settle_deadline:
+                stream.read(frame_samples, exception_on_overflow=False)
+            self.wake.reset()
+
+            while True:
+                frame = stream.read(frame_samples, exception_on_overflow=False)
+                if self.wake.detect(frame):
+                    break
+
+            stream.stop_stream()
+            stream.close()
+
+        await asyncio.to_thread(await_wake_blocking)
+        print("🔔 Wake word detected — listening…")
+        return await self.record_utterance()
 
     async def play(self, audio: bytes) -> None:
         """Play PCM audio through the default output device."""

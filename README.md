@@ -76,6 +76,29 @@ tests/                 smoke tests (skeleton wiring only)
 
 ## Quickstart
 
+### TL;DR (with `make`)
+
+A `Makefile` wraps every step below. From a clean clone:
+
+```bash
+make setup        # create venv, install deps, scaffold .env (then edit .env)
+make db           # start Postgres+pgvector (optional — memory only)
+make ollama       # pull the embedding model (optional — memory only)
+make run          # text-mode REPL
+```
+
+Run `make` (or `make help`) to see all targets. Other handy ones:
+
+```bash
+make install-voice   # add the mic/STT/TTS stack, then: make voice
+make test            # run the test suite
+make package         # build the shippable Docker image (eve:latest)
+make dist            # versioned source tarball in dist/
+make up              # run the full app + db stack in Docker
+```
+
+The rest of this section explains each step manually.
+
 ### 1. Database (Docker)
 
 ```bash

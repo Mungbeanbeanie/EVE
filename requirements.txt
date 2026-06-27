@@ -23,6 +23,10 @@ pyaudio>=0.2.14      # raw mic capture + speaker playback
 # Text-to-speech (local)
 pyttsx3>=2.90
 
+# Wake-word detection (local, no torch) — only needed for VOICE_INPUT=wake.
+# Pretrained ONNX keyword models ("hey_jarvis", "alexa", …) run on CPU.
+openwakeword>=0.6
+
 # Memory — mem0 manages vector memory; backed by Postgres + pgvector
 mem0ai>=0.1.0
 groq>=1.0             # required when llm_provider=groq

@@ -109,12 +109,16 @@ class Agent:
         "Listening…" cue makes that obvious, and blank/noise transcripts are skipped
         so a stray sound doesn't trigger an empty turn.
         """
-        push_to_talk = self.config.voice_input.lower() == "ptt"
-        if push_to_talk:
+        mode = self.config.voice_input.lower()
+        if mode == "ptt":
             print("EVE voice mode — push-to-talk. Ctrl+C to quit.")
+        elif mode == "wake":
+            print(f"EVE voice mode — say '{self.config.wake_word}' to talk. Ctrl+C to quit.")
         while self._running:
-            if push_to_talk:
+            if mode == "ptt":
                 audio = await self.audio.record_push_to_talk()
+            elif mode == "wake":
+                audio = await self.audio.record_with_wake_word()
             else:
                 print("🎤 Listening… (speak, then pause; Ctrl+C to quit)")
                 audio = await self.audio.record_utterance()  # VAD-segmented buffer
