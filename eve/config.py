@@ -28,6 +28,11 @@ class Config(BaseSettings):
     llm_api_key: str | None = None
     llm_api_base: str | None = None  # for self-hosted / Ollama
 
+    # ── Embedder (separate from LLM — Anthropic has no embedding API) ────────
+    embedder_provider: str = "ollama"
+    embedder_model: str = "nomic-embed-text"
+    embedder_base_url: str = "http://localhost:11434"  # Ollama server URL
+
     # ── Database (memory backend) ────────────────────────────────────────────
     database_url: str = "postgresql://eve:eve@localhost:5432/eve"
 
