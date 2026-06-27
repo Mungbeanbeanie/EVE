@@ -145,7 +145,7 @@ agent from the inside out (text + brain first, audio last).
 - [ ] Confirm/tune `eve/memory/schema.sql` (embedding dimension, indexes)
 
 **Tools (Google first, Microsoft later)**
-- [ ] Register adapters in `Agent.from_config` (`eve/agent.py`)
+- [DONE] Register adapters in `Agent.from_config` (`eve/agent.py`)
 - [ ] OAuth + Gmail/Calendar/Drive handlers in `eve/tools/adapters/google.py`
 - [ ] Argument validation + destructive-action guard in `eve/tools/executor.py`
 - [ ] Microsoft Graph handlers in `eve/tools/adapters/microsoft.py`

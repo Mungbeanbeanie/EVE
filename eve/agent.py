@@ -24,6 +24,8 @@ from eve.pipeline.stt import WhisperSTT
 from eve.pipeline.tts import Pyttsx3TTS
 from eve.tools.executor import ToolExecutor
 from eve.tools.registry import ToolRegistry
+from eve.tools.adapters.google import GoogleAdapter
+from eve.tools.adapters.microsoft import MicrosoftAdapter
 
 log = logging.getLogger(__name__)
 
@@ -64,9 +66,8 @@ class Agent:
         """
         memory = MemoryManager.from_config(config)
         tools = ToolRegistry()
-        # TODO(eve): register your tool adapters here, e.g.
-        #   from eve.tools.adapters.google import GoogleAdapter
-        #   GoogleAdapter(config).register_into(tools)
+        GoogleAdapter(config).register_into(tools)
+        MicrosoftAdapter(config).register_into(tools)
         executor = ToolExecutor(registry=tools)
 
         return cls(
