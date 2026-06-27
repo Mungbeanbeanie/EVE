@@ -8,7 +8,7 @@ frames (10/20/30 ms) of 16-bit mono PCM at 8/16/32/48 kHz.
 from __future__ import annotations
 
 # TODO(eve): import webrtcvad here once you implement the body.
-#   import webrtcvad
+import webrtcvad
 
 
 class VoiceActivityDetector:
@@ -25,16 +25,17 @@ class VoiceActivityDetector:
         """
         self.sample_rate = sample_rate
         self.aggressiveness = aggressiveness
-        # TODO(eve): self._vad = webrtcvad.Vad(aggressiveness)
+        self._vad = webrtcvad.Vad(aggressiveness)
 
     def is_speech(self, frame: bytes) -> bool:
         """Return True if a single PCM frame contains speech.
 
         `frame` must be exactly FRAME_MS worth of samples (see frame_bytes()).
         """
-        # TODO(eve): 1. Validate the frame length matches FRAME_MS at sample_rate.
-        # TODO(eve): 2. return self._vad.is_speech(frame, self.sample_rate)
-        raise NotImplementedError("Implement VAD.is_speech — see eve/pipeline/vad.py")
+        expected = self.frame_bytes()
+        if len(frame) != expected:
+            raise ValueError(f"Frame must be {expected} bytes, got {len(frame)}")
+        
 
     def frame_bytes(self) -> int:
         """Number of PCM bytes in one VAD frame (16-bit mono => 2 bytes/sample)."""
