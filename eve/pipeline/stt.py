@@ -17,11 +17,13 @@ more accurate). On CPU, compute_type="int8" gives the best speed.
 
 from __future__ import annotations
 
+import asyncio
+import time
+import numpy as np
+
+from faster_whisper import WhisperModel
 from eve.config import Config
 from eve.pipeline.base import STTEngine
-
-# TODO(eve): import faster-whisper here once you implement the body.
-#   from faster_whisper import WhisperModel
 
 
 class WhisperSTT(STTEngine):
@@ -34,30 +36,27 @@ class WhisperSTT(STTEngine):
 
     def _ensure_model(self) -> None:
         """Load the faster-whisper model once, choosing device + compute type."""
-        # TODO(eve): 1. Resolve device: on this Intel Mac use "cpu". If self.device
-        #               is "auto", default to "cpu" (no CUDA on Intel macOS).
-        # TODO(eve): 2. Pick compute_type: "int8" for CPU (fast), "float16" for CUDA.
-        # TODO(eve): 3. self._model = WhisperModel(self.model_name, device=..., compute_type=...)
-        #               The first run downloads the model weights and caches them.
-        raise NotImplementedError(
-            "Load faster-whisper model — see eve/pipeline/stt.py:_ensure_model"
-        )
+        if self._model is not None:
+            return
+        device = "cpu" if self.device == "auto" else self.device
+        compute_type = "int8" if device == "cpu" else "float16"
+        self._model = WhisperModel(self.model_name, device=device, compute_type=compute_type)
 
-    async def transcribe(self, audio: bytes) -> str:
+    async def _transcribe(self, audio: bytes) -> str:
         """Convert a PCM audio buffer to text.
 
         Part of: Mic -> STT -> sanitize -> LLM. Returns the recognized utterance.
         """
-        # TODO(eve): 1. self._ensure_model().
-        # TODO(eve): 2. Convert PCM int16 bytes -> float32 numpy array normalized to
-        #               [-1, 1] at 16 kHz mono (faster-whisper accepts a numpy array):
-        #                 import numpy as np
-        #                 samples = np.frombuffer(audio, np.int16).astype(np.float32) / 32768.0
-        # TODO(eve): 3. Run off-thread (asyncio.to_thread) to avoid blocking the loop:
-        #                 segments, info = self._model.transcribe(samples, language="en")
-        # TODO(eve): 4. Join segment texts, strip, and return; log elapsed time for
-        #               the latency goal. (segments is a generator — iterating it is
-        #               what actually does the work.)
-        raise NotImplementedError(
-            "Implement faster-whisper transcription — see eve/pipeline/stt.py:transcribe"
-        )
+        self._ensure_model()
+        samples = np.frombuffer(audio, np.int16).astype(np.float32) / 32768.0
+
+        def transcribe() -> str:
+            start = time.perf_counter()
+            segments, info = self._model.transcribe(samples, language="en")
+            text = " ".join(seg.text for seg in segments).strip()
+            elapsed = time.perf_counter() - start
+            print(f"Transcription took {elapsed:.2f}s")
+            return text
+    
+        return await asyncio.to_thread(transcribe)
+    
