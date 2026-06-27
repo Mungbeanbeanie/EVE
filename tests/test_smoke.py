@@ -96,8 +96,25 @@ async def test_executor_runs_a_tool():
     assert await executor.run("add", '{"a": 2, "b": 3}') == 5
 
 
-async def test_unimplemented_stub_raises(config):
-    """Calling a not-yet-built method fails loudly, pointing you at the TODO."""
-    mem = MemoryManager.from_config(config)
-    with pytest.raises(NotImplementedError):
-        await mem.recall("anything")
+# Point at a closed port so these always exercise the degradation path (and never
+# touch / pollute a real DB), regardless of whether Postgres happens to be up.
+_UNREACHABLE_DB = "postgresql://eve:eve@localhost:59999/eve"
+
+
+async def test_recall_degrades_when_backend_unreachable(config):
+    """With no DB, recall must not crash — it falls back to working memory only."""
+    cfg = config.model_copy(update={"database_url": _UNREACHABLE_DB})
+    mem = MemoryManager.from_config(cfg)
+    messages = await mem.recall("anything")
+    # Always returns at least the system prompt from working memory.
+    assert isinstance(messages, list)
+    assert messages and messages[0]["role"] == "system"
+
+
+async def test_remember_degrades_when_backend_unreachable(config):
+    """With no DB, remember must not crash — working memory still records the turn."""
+    cfg = config.model_copy(update={"database_url": _UNREACHABLE_DB})
+    mem = MemoryManager.from_config(cfg)
+    await mem.remember(user="hello", assistant="hi there")
+    snapshot = mem.working.snapshot()
+    assert {"role": "assistant", "content": "hi there"} in snapshot

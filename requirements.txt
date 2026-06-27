@@ -15,6 +15,9 @@ pydantic-settings>=2.2
 # CPU-friendly, and often faster than openai-whisper. Pass it a numpy PCM array.
 faster-whisper>=1.0
 webrtcvad>=2.0.10    # voice-activity / silence detection
+# webrtcvad imports the legacy pkg_resources, which setuptools removed in v81.
+# Pin below 81 so `import webrtcvad` works on Python 3.12+ venvs.
+setuptools<81
 pyaudio>=0.2.14      # raw mic capture + speaker playback
 
 # Text-to-speech (local)
