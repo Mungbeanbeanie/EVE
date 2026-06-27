@@ -40,6 +40,11 @@ class Config(BaseSettings):
     whisper_model: str = "base"
     whisper_device: str = "auto"  # auto | cpu | cuda
 
+    # ── Text-to-speech ───────────────────────────────────────────────────────
+    # Substring of the macOS/Windows voice name to use (case-insensitive), e.g.
+    # "Samantha", "Daniel", "Zoe". Leave blank to auto-pick an English voice.
+    tts_voice: str | None = None
+
     # ── Tools ────────────────────────────────────────────────────────────────
     google_client_id: str | None = None
     google_client_secret: str | None = None

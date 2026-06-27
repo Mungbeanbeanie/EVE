@@ -7,12 +7,15 @@ synchronous and not thread-safe, so drive it carefully off the event loop.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
+import pyttsx3
+
 from eve.config import Config
 from eve.pipeline.base import TTSEngine
 
-import asyncio
-
-import pyttsx3
+log = logging.getLogger(__name__)
 
 
 class Pyttsx3TTS(TTSEngine):
@@ -36,7 +39,7 @@ class Pyttsx3TTS(TTSEngine):
     _PREFERRED_VOICES = ("samantha", "alex", "daniel", "karen", "moira")
 
     def _select_english_voice(self) -> None:
-        """Pick a concrete English voice, falling back gracefully to the default."""
+        """Choose the voice: explicit config first, then a preferred/English fallback."""
         try:
             voices = self._engine.getProperty("voices") or []
         except Exception:  # some drivers don't expose a voice list
@@ -51,16 +54,27 @@ class Pyttsx3TTS(TTSEngine):
             blob = f"{name_of(voice)} {' '.join(langs)}".lower()
             return "en_" in blob or "en-" in blob or "english" in blob
 
-        # 1. A preferred named voice, if installed.
-        chosen = next(
-            (v for pref in self._PREFERRED_VOICES for v in voices if pref in name_of(v)),
-            None,
-        )
-        # 2. Otherwise any English voice.
+        # 1. A voice the user named in config (e.g. TTS_VOICE=Zoe).
+        wanted = (self.config.tts_voice or "").strip().lower()
+        chosen = next((v for v in voices if wanted and wanted in name_of(v)), None)
+        if wanted and chosen is None:
+            log.warning(
+                "Configured TTS_VOICE=%r not found; falling back. Run "
+                "`python -m eve.pipeline.tts` to list installed voices.",
+                self.config.tts_voice,
+            )
+        # 2. A reliable preferred named voice, if installed.
+        if chosen is None:
+            chosen = next(
+                (v for pref in self._PREFERRED_VOICES for v in voices if pref in name_of(v)),
+                None,
+            )
+        # 3. Otherwise any English voice.
         if chosen is None:
             chosen = next((v for v in voices if is_english(v)), None)
         if chosen is not None:
             self._engine.setProperty("voice", chosen.id)
+            log.info("TTS voice: %s", getattr(chosen, "name", chosen.id))
 
     async def speak(self, text: str) -> None:
         """Synthesize `text` and play it through the speaker."""
@@ -69,3 +83,19 @@ class Pyttsx3TTS(TTSEngine):
             self._engine.say(text)
             self._engine.runAndWait()
         await asyncio.to_thread(_speak)
+
+
+def _list_voices() -> None:
+    """Print installed TTS voices so you can pick one for TTS_VOICE in .env."""
+    engine = pyttsx3.init()
+    print("Installed voices (set TTS_VOICE to part of a name):\n")
+    for v in engine.getProperty("voices") or []:
+        langs = ", ".join(
+            lang.decode() if isinstance(lang, bytes) else str(lang)
+            for lang in (getattr(v, "languages", None) or [])
+        )
+        print(f"  {getattr(v, 'name', '?'):<24} {langs:<12} {v.id}")
+
+
+if __name__ == "__main__":  # `python -m eve.pipeline.tts`
+    _list_voices()

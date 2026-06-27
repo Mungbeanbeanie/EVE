@@ -103,10 +103,19 @@ class Agent:
             await self.memory.flush()
 
     async def run_voice(self) -> None:
-        """Voice loop: Mic -> STT -> sanitize -> LLM -> TTS -> Speaker."""
+        """Voice loop: Mic -> STT -> sanitize -> LLM -> TTS -> Speaker.
+
+        Loops forever (until Ctrl+C): after each reply it returns to listening. The
+        "Listening…" cue makes that obvious, and blank/noise transcripts are skipped
+        so a stray sound doesn't trigger an empty turn.
+        """
         while self._running:
+            print("🎤 Listening… (speak, then pause; Ctrl+C to quit)")
             audio = await self.audio.record_utterance()  # VAD-segmented buffer
-            text = await self.stt.transcribe(audio)
+            text = (await self.stt.transcribe(audio)).strip()
+            if not text:
+                continue  # silence / background noise → keep listening
+            print(f"you > {text}")
             await self._handle_turn(text, speak=True)
 
     async def run_text(self) -> None:

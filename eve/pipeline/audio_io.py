@@ -8,6 +8,7 @@ one utterance (from first speech to a trailing run of silence).
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pyaudio
 
@@ -17,6 +18,12 @@ from eve.pipeline.vad import VoiceActivityDetector
 
 
 SAMPLE_RATE = 16_000  # 16 kHz: the rate webrtcvad and Whisper both expect (see base.py)
+# Discard buffered mic input for this long after opening the stream. This drops the
+# tail of EVE's own speech (and any backlog) so it doesn't transcribe itself.
+SETTLE_SECONDS = 0.4
+# Ignore "utterances" with less than this much actual speech — usually an echo/noise
+# blip rather than a real spoken request.
+MIN_SPEECH_SECONDS = 0.4
 
 
 class PyAudioIO(AudioIO):
@@ -34,36 +41,53 @@ class PyAudioIO(AudioIO):
         Suggested approach:
         """
         def record_blocking() -> bytes:
+            chunk = self.vad.frame_bytes() // 2  # samples per VAD frame
             stream = self._pa.open(
                 format=pyaudio.paInt16,
                 channels=1,
                 rate=self.sample_rate,
                 input=True,  # default input device (don't hardcode an index)
-                frames_per_buffer=self.vad.frame_bytes() // 2,
+                frames_per_buffer=chunk,
             )
 
-            silence_threshold = int(0.8 *self.sample_rate / (self.vad.frame_bytes() //2))
-            speech_frames = []
+            # Flush echo: throw away whatever was buffered before/just as we started
+            # listening (the tail of EVE's own TTS) so we don't transcribe ourselves.
+            settle_deadline = time.monotonic() + SETTLE_SECONDS
+            while time.monotonic() < settle_deadline:
+                stream.read(chunk, exception_on_overflow=False)
+
+            silence_threshold = int(0.8 * self.sample_rate / chunk)
+            min_speech_frames = int(MIN_SPEECH_SECONDS * self.sample_rate / chunk)
+            speech_frames: list[bytes] = []
             speech_started = False
             silent_frames = 0
+            voiced_frames = 0
 
             while True:
-                frame = stream.read(self.vad.frame_bytes() // 2)
+                # exception_on_overflow=False: if the input buffer overruns while
+                # we were busy (transcribing/speaking the previous turn), drop the
+                # late frames instead of crashing with OSError [-9981].
+                frame = stream.read(chunk, exception_on_overflow=False)
                 if self.vad.is_speech(frame):
                     speech_started = True
                     silent_frames = 0
+                    voiced_frames += 1
                     speech_frames.append(frame)
                 elif speech_started:
                     silent_frames += 1
                     speech_frames.append(frame)
                     if silent_frames >= silence_threshold:
                         break
-            
+
             stream.stop_stream()
             stream.close()
 
+            # Too little real speech → likely an echo/noise blip; report nothing so
+            # the loop keeps listening instead of "hearing" a phantom utterance.
+            if voiced_frames < min_speech_frames:
+                return b""
             return b"".join(speech_frames)
-        
+
         return await asyncio.to_thread(record_blocking)
 
     async def play(self, audio: bytes) -> None:
