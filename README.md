@@ -225,7 +225,7 @@ agent from the inside out (text + brain first, audio last).
 - [DONE] VAD frames in `eve/pipeline/vad.py`
 - [DONE] Mic capture + playback in `eve/pipeline/audio_io.py`
 - [DONE] faster-whisper load + transcribe in `eve/pipeline/stt.py`
-- [ ] pyttsx3 synthesis in `eve/pipeline/tts.py`
+- [DONE] pyttsx3 synthesis in `eve/pipeline/tts.py`
 
 When all boxes are checked, `python main.py --mode voice` gives you a talking,
 remembering, tool-using personal agent. 🎉
