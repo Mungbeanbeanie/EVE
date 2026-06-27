@@ -19,7 +19,7 @@ class WorkingMemory:
     def __init__(self, max_turns: int = 20, system_prompt: str | None = None) -> None:
         # Each entry is a chat Message dict: {"role": ..., "content": ...}
         self._buffer: deque[Message] = deque(maxlen=max_turns)
-        self.system_prompt = system_prompt or "You are EVE, a helpful personal assistant."
+        self.system_prompt = system_prompt or "You are EVE, a helpful personal assistant and a friend."
 
     # ── Writes (plumbing — implemented) ──────────────────────────────────────
     def add_user(self, text: str) -> None:

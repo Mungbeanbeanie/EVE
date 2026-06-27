@@ -45,6 +45,11 @@ class Config(BaseSettings):
     # "Samantha", "Daniel", "Zoe". Leave blank to auto-pick an English voice.
     tts_voice: str | None = None
 
+    # ── Voice input mode ─────────────────────────────────────────────────────
+    # "vad" = always-listening, auto-segmented by silence detection.
+    # "ptt" = push-to-talk: press Enter to start/stop each utterance (no echo).
+    voice_input: str = "vad"
+
     # ── Tools ────────────────────────────────────────────────────────────────
     google_client_id: str | None = None
     google_client_secret: str | None = None

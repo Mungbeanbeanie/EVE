@@ -8,6 +8,7 @@ one utterance (from first speech to a trailing run of silence).
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 
 import pyaudio
@@ -89,6 +90,39 @@ class PyAudioIO(AudioIO):
             return b"".join(speech_frames)
 
         return await asyncio.to_thread(record_blocking)
+
+    async def record_push_to_talk(self) -> bytes:
+        """Record one utterance gated by the keyboard (push-to-talk).
+
+        The mic is opened only between two Enter presses, so EVE can never capture
+        its own speech — the robust alternative to silence-detected listening.
+        """
+        await asyncio.to_thread(input, "⏎  Press Enter, speak, then press Enter to send… ")
+        print("🔴 Recording… press Enter to stop.")
+
+        chunk = self.vad.frame_bytes() // 2
+        frames: list[bytes] = []
+        stop = threading.Event()
+
+        def capture() -> None:
+            stream = self._pa.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=self.sample_rate,
+                input=True,
+                frames_per_buffer=chunk,
+            )
+            while not stop.is_set():
+                frames.append(stream.read(chunk, exception_on_overflow=False))
+            stream.stop_stream()
+            stream.close()
+
+        worker = threading.Thread(target=capture, daemon=True)
+        worker.start()
+        await asyncio.to_thread(input)  # second Enter ends the recording
+        stop.set()
+        await asyncio.to_thread(worker.join)
+        return b"".join(frames)
 
     async def play(self, audio: bytes) -> None:
         """Play PCM audio through the default output device."""
