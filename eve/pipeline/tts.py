@@ -25,9 +25,42 @@ class Pyttsx3TTS(TTSEngine):
     def _ensure_engine(self):
         """Initialize the pyttsx3 engine once and tune voice/rate."""
         if self._engine is not None:
-            return 
+            return
         self._engine = pyttsx3.init()
         self._engine.setProperty("rate", 185)
+        self._select_english_voice()
+
+    # Reliable, broadly-installed English voices, in preference order. The platform
+    # *default* voice can synthesize empty audio in headless/sandboxed contexts
+    # (macOS NSSpeechSynthesizer), so we steer toward a known-good named voice first.
+    _PREFERRED_VOICES = ("samantha", "alex", "daniel", "karen", "moira")
+
+    def _select_english_voice(self) -> None:
+        """Pick a concrete English voice, falling back gracefully to the default."""
+        try:
+            voices = self._engine.getProperty("voices") or []
+        except Exception:  # some drivers don't expose a voice list
+            return
+
+        def name_of(voice) -> str:
+            return f"{getattr(voice, 'id', '')} {getattr(voice, 'name', '')}".lower()
+
+        def is_english(voice) -> bool:
+            langs = [lang.decode() if isinstance(lang, bytes) else str(lang)
+                     for lang in (getattr(voice, "languages", None) or [])]
+            blob = f"{name_of(voice)} {' '.join(langs)}".lower()
+            return "en_" in blob or "en-" in blob or "english" in blob
+
+        # 1. A preferred named voice, if installed.
+        chosen = next(
+            (v for pref in self._PREFERRED_VOICES for v in voices if pref in name_of(v)),
+            None,
+        )
+        # 2. Otherwise any English voice.
+        if chosen is None:
+            chosen = next((v for v in voices if is_english(v)), None)
+        if chosen is not None:
+            self._engine.setProperty("voice", chosen.id)
 
     async def speak(self, text: str) -> None:
         """Synthesize `text` and play it through the speaker."""

@@ -42,7 +42,7 @@ class WhisperSTT(STTEngine):
         compute_type = "int8" if device == "cpu" else "float16"
         self._model = WhisperModel(self.model_name, device=device, compute_type=compute_type)
 
-    async def _transcribe(self, audio: bytes) -> str:
+    async def transcribe(self, audio: bytes) -> str:
         """Convert a PCM audio buffer to text.
 
         Part of: Mic -> STT -> sanitize -> LLM. Returns the recognized utterance.

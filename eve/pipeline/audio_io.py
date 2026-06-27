@@ -16,7 +16,7 @@ from eve.pipeline.base import AudioIO
 from eve.pipeline.vad import VoiceActivityDetector
 
 
-SAMPLE_RATE = 48_000  # keep consistent with VAD + Whisper
+SAMPLE_RATE = 16_000  # 16 kHz: the rate webrtcvad and Whisper both expect (see base.py)
 
 
 class PyAudioIO(AudioIO):
@@ -38,8 +38,7 @@ class PyAudioIO(AudioIO):
                 format=pyaudio.paInt16,
                 channels=1,
                 rate=self.sample_rate,
-                input=True,
-                input_device_index = 2,
+                input=True,  # default input device (don't hardcode an index)
                 frames_per_buffer=self.vad.frame_bytes() // 2,
             )
 
