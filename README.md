@@ -160,6 +160,42 @@ LLM_MODEL=openai/gpt-4o          # or gemini/gemini-1.5-pro, ollama/llama3, …
 OPENAI_API_KEY=sk-...
 ```
 
+### Google Workspace tools (optional)
+
+EVE can search Gmail, list/create Calendar events, and list Drive files. These are
+exposed to the LLM as tools (`gmail_search`, `calendar_list_events`,
+`calendar_create_event`, `drive_list_files`). Until you configure OAuth they simply
+return a structured `{"error": ...}` the model can read — nothing crashes.
+
+To enable them:
+
+1. **Create an OAuth client** in the [Google Cloud Console](https://console.cloud.google.com/):
+   - Create (or pick) a project, then **APIs & Services → Enable APIs** and enable
+     the **Gmail API**, **Google Calendar API**, and **Google Drive API**.
+   - **APIs & Services → OAuth consent screen**: configure it (External is fine for
+     personal use), and add your Google account under **Test users**.
+   - **APIs & Services → Credentials → Create credentials → OAuth client ID**, type
+     **Desktop app**. (Desktop clients allow the `localhost` redirect EVE uses.)
+2. **Add the credentials to `.env`:**
+
+   ```env
+   GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=xxxx
+   GOOGLE_TOKEN_PATH=./.secrets/google_token.json   # where the cached token is stored
+   ```
+3. **First run consents once.** The first time EVE calls a Google tool it opens a
+   browser for you to grant access, then caches the token at `GOOGLE_TOKEN_PATH`;
+   later runs reuse and auto-refresh it. Approve the scopes it requests:
+   `gmail.readonly`, `calendar.events`, `drive.metadata.readonly` (defined as
+   `SCOPES` in `eve/tools/adapters/google.py`).
+
+> **Re-consent after changing scopes.** If you edit `SCOPES`, delete the cached
+> token file so EVE runs the consent flow again with the new permissions.
+
+> ⚠️ `calendar_create_event` **writes** to your calendar. The shared confirmation /
+> destructive-action guard in `eve/tools/executor.py` is still a TODO, so today the
+> model can create events without an explicit confirmation step.
+
 ---
 
 ## MVP — what's left to do
@@ -181,7 +217,7 @@ agent from the inside out (text + brain first, audio last).
 
 **Tools (Google first, Microsoft later)**
 - [DONE] Register adapters in `Agent.from_config` (`eve/agent.py`)
-- [ ] OAuth + Gmail/Calendar/Drive handlers in `eve/tools/adapters/google.py`
+- [DONE] OAuth + Gmail/Calendar/Drive handlers in `eve/tools/adapters/google.py`
 - [ ] Argument validation + destructive-action guard in `eve/tools/executor.py`
 - [ ] Microsoft Graph handlers in `eve/tools/adapters/microsoft.py`
 
