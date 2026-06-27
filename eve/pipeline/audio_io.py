@@ -16,7 +16,7 @@ from eve.pipeline.base import AudioIO
 from eve.pipeline.vad import VoiceActivityDetector
 
 
-SAMPLE_RATE = 48_000  
+SAMPLE_RATE = 48_000  # keep consistent with VAD + Whisper
 
 
 class PyAudioIO(AudioIO):
@@ -37,13 +37,13 @@ class PyAudioIO(AudioIO):
             stream = self._pa.open(
                 format=pyaudio.paInt16,
                 channels=1,
-                rate=48000,
+                rate=self.sample_rate,
                 input=True,
                 input_device_index = 2,
                 frames_per_buffer=self.vad.frame_bytes() // 2,
             )
 
-            silence_threshold = int(0.8 *self.sample_rate / (self.vad.frame_bytes()))
+            silence_threshold = int(0.8 *self.sample_rate / (self.vad.frame_bytes() //2))
             speech_frames = []
             speech_started = False
             silent_frames = 0
