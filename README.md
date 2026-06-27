@@ -138,7 +138,7 @@ agent from the inside out (text + brain first, audio last).
 - [ ] Harden input handling in `eve/llm/sanitize.py`
 
 **Memory (working + procedural + episodic)**
-- [ ] Wire mem0 → pgvector in `eve/memory/mem0_backend.py`
+- [DONE] Wire mem0 → pgvector in `eve/memory/mem0_backend.py`
 - [ ] `add`/`search`/`recent` for `eve/memory/procedural.py` and `eve/memory/episodic.py`
 - [ ] Context assembly in `eve/memory/working.py` (`render`)
 - [ ] Recall blending + write policy in `eve/memory/manager.py` (`recall`, `remember`)
