@@ -9,12 +9,12 @@ Docs: https://docs.litellm.ai/
 """
 
 from __future__ import annotations
+import asyncio
 
 from eve.config import Config
 from eve.llm.base import LLMClient, Message
 
-# TODO(eve): import litellm here once you implement the body.
-#   import litellm
+import litellm # type: ignore
 
 
 class LiteLLMClient(LLMClient):
@@ -30,18 +30,24 @@ class LiteLLMClient(LLMClient):
         messages: list[Message],
         tools: list[dict] | None = None,
         executor=None,
+        max_iterations: int = 10,
     ) -> str:
         """Run the tool-use loop and return the model's final text answer."""
-        # TODO(eve): 1. Call the model (run off-thread; litellm.completion is sync):
-        #               resp = await asyncio.to_thread(
-        #                   litellm.completion,
-        #                   model=self.model, messages=messages, tools=tools,
-        #                   api_key=self.api_key, api_base=self.api_base)
-        # TODO(eve): 2. Inspect resp.choices[0].message for tool_calls.
-        # TODO(eve): 3. If there are tool calls: for each, await executor.run(name, args),
-        #               append a role="tool" message with the result, and loop back to 1.
-        # TODO(eve): 4. When there are no more tool calls, return message.content.
-        # TODO(eve): 5. Add a max-iterations guard so a misbehaving model can't loop forever.
-        raise NotImplementedError(
-            "Implement the LiteLLM tool-use loop — see eve/llm/litellm_client.py:respond"
+        for iteration in range(max_iterations):
+            resp = await asyncio.to_thread(
+                litellm.completion,
+                model=self.model,
+                messages=messages,
+                tools=tools,
+                api_key=self.api_key,
+                api_base=self.api_base,
+            )
+            msg = resp.choices[0].message
+            if not msg.tool_calls:
+                return msg.content
+            for call in msg.tool_calls:
+                result = await executor.run(call.function.name, call.function.arguments)
+                messages.append(Message(role="tool", content=str(result), tool_call_id=call.id))
+        raise RuntimeError(
+            f"Tool-use loop exceeded {max_iterations} iterations — possible runaway model."
         )
