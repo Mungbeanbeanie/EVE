@@ -142,7 +142,7 @@ agent from the inside out (text + brain first, audio last).
 - [DONE] `add`/`search`/`recent` for `eve/memory/procedural.py` and `eve/memory/episodic.py`
 - [DONE] Context assembly in `eve/memory/working.py` (`render`)
 - [DONE] Recall blending + write policy in `eve/memory/manager.py` (`recall`, `remember`)
-- [ ] Confirm/tune `eve/memory/schema.sql` (embedding dimension, indexes)
+- [DONE] Confirm/tune `eve/memory/schema.sql` (embedding dimension, indexes)
 
 **Tools (Google first, Microsoft later)**
 - [ ] Register adapters in `Agent.from_config` (`eve/agent.py`)

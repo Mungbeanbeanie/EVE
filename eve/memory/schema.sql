@@ -14,7 +14,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS procedural_memory (
     id          BIGSERIAL PRIMARY KEY,
     content     TEXT        NOT NULL,
-    embedding   vector(1536),               -- TODO(eve): set dim to your embedder
+    embedding   vector(768),            
     metadata    JSONB       NOT NULL DEFAULT '{}'::jsonb,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -23,13 +23,12 @@ CREATE TABLE IF NOT EXISTS procedural_memory (
 CREATE TABLE IF NOT EXISTS episodic_memory (
     id          BIGSERIAL PRIMARY KEY,
     content     TEXT        NOT NULL,
-    embedding   vector(1536),               -- TODO(eve): set dim to your embedder
+    embedding   vector(768),              
     metadata    JSONB       NOT NULL DEFAULT '{}'::jsonb,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ── Indexes for fast vector + time recall ────────────────────────────────────
--- TODO(eve): create ivfflat/hnsw indexes once you've picked a distance op + dim, e.g.
---   CREATE INDEX ON episodic_memory USING hnsw (embedding vector_cosine_ops);
---   CREATE INDEX ON procedural_memory USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX IF NOT EXISTS idx_episodic_created_at ON episodic_memory (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_episodic_embedding   ON episodic_memory   USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_procedural_embedding ON procedural_memory USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_episodic_created_at  ON episodic_memory   (created_at DESC);
