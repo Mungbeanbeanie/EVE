@@ -23,7 +23,7 @@ def sanitize(text: str) -> str:
     # TODO(eve): 3. Detect/neutralize prompt-injection patterns (e.g. "ignore previous
     #               instructions", attempts to exfiltrate secrets or change the system
     #               prompt). Decide: redact, refuse, or flag for confirmation.
-    # 
+    
     # TODO(eve): 4. Consider a confirmation gate before destructive tool actions
     #               (deleting email, sending messages) rather than blocking input here.
     # For now, just collapse surrounding whitespace so the pipeline works:
