@@ -11,6 +11,7 @@ memories that share the same backend.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from eve.memory.base import MemoryRecord, MemoryStore
@@ -27,25 +28,35 @@ class ProceduralMemory(MemoryStore):
 
     async def add(self, content: str, metadata: dict[str, Any] | None = None) -> None:
         """Persist a learned preference/skill."""
-        # TODO(eve): 1. mem = self.backend.client()
-        # TODO(eve): 2. Add to mem0 under user_id=PROCEDURAL_NS with your metadata,
-        #               e.g. mem.add(content, user_id=PROCEDURAL_NS, metadata=...).
-        #               Run blocking calls via asyncio.to_thread.
-        raise NotImplementedError(
-            "Implement procedural add — see eve/memory/procedural.py:add"
-        )
+        mem = self.backend.client()
+        await asyncio.to_thread(mem.add, content, user_id=PROCEDURAL_NS, metadata=metadata or {
+        })
 
     async def search(self, query: str, k: int = 5) -> list[MemoryRecord]:
         """Return preferences/skills relevant to `query`."""
-        # TODO(eve): 1. results = mem.search(query, user_id=PROCEDURAL_NS, limit=k)
-        # TODO(eve): 2. Map each hit into MemoryRecord(kind="procedural", score=...).
-        raise NotImplementedError(
-            "Implement procedural search — see eve/memory/procedural.py:search"
-        )
+        mem = self.backend.client()
+        raw = await asyncio.to_thread(mem.search, query, user_id=PROCEDURAL_NS, limit=k)
+        hits = raw.get("results", raw) if isinstance(raw, dict) else raw
+        return [
+            MemoryRecord(
+                content=hit["memory"],
+                kind="procedural",
+                metadata=hit.get("metadata") or {},
+                score=hit.get("score"),
+            )
+            for hit in hits
+        ]
 
     async def recent(self, n: int = 10) -> list[MemoryRecord]:
         """Return recently-learned preferences/skills."""
-        # TODO(eve): use mem0's get_all(user_id=PROCEDURAL_NS) and take the newest n.
-        raise NotImplementedError(
-            "Implement procedural recent — see eve/memory/procedural.py:recent"
-        )
+        mem = self.backend.client()
+        raw = await asyncio.to_thread(mem.get_all, user_id=PROCEDURAL_NS)
+        hits = raw.get("results", raw) if isinstance(raw, dict) else raw
+        return [
+            MemoryRecord(
+                content=hit["memory"],
+                kind="procedural",
+                metadata=hit.get("metadata") or {},
+            )
+            for hit in hits[:n]
+        ]
