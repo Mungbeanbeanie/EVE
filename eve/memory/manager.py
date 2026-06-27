@@ -11,6 +11,7 @@ Construction is real wiring; the read/write *policies* are the learning exercise
 """
 
 from __future__ import annotations
+import asyncio
 
 from eve.config import Config
 from eve.llm.base import Message
@@ -46,27 +47,23 @@ class MemoryManager:
     # ── Read ─────────────────────────────────────────────────────────────────
     async def recall(self, query: str) -> list[Message]:
         """Return the full message list for the LLM, with long-term memory blended in."""
-        # TODO(eve): 1. Retrieve in parallel (asyncio.gather):
-        #               procedural = self.procedural.search(query, k=...)
-        #               episodic   = self.episodic.search(query, k=...)
-        # TODO(eve): 2. Convert the MemoryRecords into context messages (or a single
-        #               system note) — see WorkingMemory.render.
-        # TODO(eve): 3. return self.working.render(retrieved=...).
-        raise NotImplementedError(
-            "Implement memory recall/blend — see eve/memory/manager.py:recall"
+        proc_records, epis_records = await asyncio.gather(
+            self.procedural.search(query, k=5),
+            self.episodic.search(query, k=5),
         )
+        retrieved: list[Message] = [
+            {"role": "system", "content": r.content}
+            for r in (*proc_records, *epis_records)
+        ]
+        return self.working.render(retrieved=retrieved or None)
 
     # ── Write ────────────────────────────────────────────────────────────────
     async def remember(self, *, user: str, assistant: str) -> None:
         """Persist a completed turn across the appropriate layers."""
-        # Working memory is volatile plumbing — safe to record immediately:
+        self.working.add_user(user)
         self.working.add_assistant(assistant)
 
-        # TODO(eve): 1. Always append the turn to episodic memory (what happened).
-        #               e.g. await self.episodic.add(f"User: {user}\nEVE: {assistant}")
-        # TODO(eve): 2. Decide whether this turn taught a durable preference/skill
-        #               (e.g. "from now on, ..."). If so, await self.procedural.add(...).
-        #               You might ask the LLM to extract that, or use simple heuristics.
-        raise NotImplementedError(
-            "Implement memory write policy — see eve/memory/manager.py:remember"
-        )
+        await self.episodic.add(f"User: {user}\nEVE: {assistant}")
+
+        if "from now on" in user.lower() or "always" in user.lower():
+            await self.procedural.add(f"User: {user}\nEVE: {assistant}")
