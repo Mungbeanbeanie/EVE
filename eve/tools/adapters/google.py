@@ -190,6 +190,7 @@ class GoogleAdapter(ToolAdapter):
                     "required": ["summary", "start", "end"],
                 },
                 handler=self.calendar_create_event,
+                destructive=True,  # writes to the user's calendar → confirm before run
             )
         )
         registry.register(

@@ -21,6 +21,7 @@ class Tool:
     description: str
     parameters: dict[str, Any]  # JSON Schema for the arguments object
     handler: Callable[..., Awaitable[Any]]  # async fn(**kwargs) -> result
+    destructive: bool = False  # real-world side effect → executor may require user OK
 
     def to_spec(self) -> dict:
         """Render this tool as an OpenAI-style function spec (provider-neutral)."""

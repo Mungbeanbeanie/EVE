@@ -218,7 +218,7 @@ agent from the inside out (text + brain first, audio last).
 **Tools (Google first, Microsoft later)**
 - [DONE] Register adapters in `Agent.from_config` (`eve/agent.py`)
 - [DONE] OAuth + Gmail/Calendar/Drive handlers in `eve/tools/adapters/google.py`
-- [ ] Argument validation + destructive-action guard in `eve/tools/executor.py`
+- [DONE] Argument validation + destructive-action guard in `eve/tools/executor.py`
 - [ ] Microsoft Graph handlers in `eve/tools/adapters/microsoft.py`
 
 **Voice pipeline (do last)**
