@@ -133,7 +133,7 @@ Each item maps to `# TODO(eve)` markers in the named file. Suggested order build
 agent from the inside out (text + brain first, audio last).
 
 **LLM (provider-agnostic)**
-- [ ] Tool-use loop in `eve/llm/litellm_client.py` (`respond`)
+- [DONE] Tool-use loop in `eve/llm/litellm_client.py` (`respond`)
 - [ ] (optional) Direct vendor clients in `eve/llm/providers.py`
 - [ ] Harden input handling in `eve/llm/sanitize.py`
 
