@@ -9,6 +9,8 @@ Namespaced inside mem0 under EPISODIC_NS, separate from procedural memory.
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
 from typing import Any
 
 from eve.memory.base import MemoryRecord, MemoryStore
@@ -25,24 +27,37 @@ class EpisodicMemory(MemoryStore):
 
     async def add(self, content: str, metadata: dict[str, Any] | None = None) -> None:
         """Append a timestamped event/interaction."""
-        # TODO(eve): 1. mem = self.backend.client()
-        # TODO(eve): 2. Ensure metadata carries a timestamp (created_at) so you can
-        #               do time-based queries later; store under user_id=EPISODIC_NS.
-        raise NotImplementedError(
-            "Implement episodic add — see eve/memory/episodic.py:add"
-        )
+        meta = dict(metadata or {})
+        meta.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+        mem = self.backend.client()
+        await asyncio.to_thread(mem.add, content, user_id=EPISODIC_NS, metadata=meta)
 
     async def search(self, query: str, k: int = 5) -> list[MemoryRecord]:
         """Return past events most relevant to `query`."""
-        # TODO(eve): mem.search(query, user_id=EPISODIC_NS, limit=k) -> MemoryRecords
-        #            (kind="episodic"). Optionally blend recency into the ranking.
-        raise NotImplementedError(
-            "Implement episodic search — see eve/memory/episodic.py:search"
-        )
+        mem = self.backend.client()
+        raw = await asyncio.to_thread(mem.search, query, user_id=EPISODIC_NS, limit=k)
+        hits = raw.get("results", raw) if isinstance(raw, dict) else raw
+        return [
+            MemoryRecord(
+                content=hit["memory"],
+                kind="episodic",
+                metadata=hit.get("metadata") or {},
+                score=hit.get("score"),
+            )
+            for hit in hits
+        ]
 
     async def recent(self, n: int = 10) -> list[MemoryRecord]:
         """Return the most recent events, newest first."""
-        # TODO(eve): get_all(user_id=EPISODIC_NS), sort by timestamp desc, take n.
-        raise NotImplementedError(
-            "Implement episodic recent — see eve/memory/episodic.py:recent"
-        )
+        mem = self.backend.client()
+        raw = await asyncio.to_thread(mem.get_all, user_id=EPISODIC_NS)
+        hits = raw.get("results", raw) if isinstance(raw, dict) else raw
+        hits = sorted(hits, key=lambda h: h.get("created_at") or "", reverse=True)
+        return [
+            MemoryRecord(
+                content=hit["memory"],
+                kind="episodic",
+                metadata=hit.get("metadata") or {},
+            )
+            for hit in hits[:n]
+        ]

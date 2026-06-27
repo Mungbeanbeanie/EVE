@@ -139,7 +139,7 @@ agent from the inside out (text + brain first, audio last).
 
 **Memory (working + procedural + episodic)**
 - [DONE] Wire mem0 → pgvector in `eve/memory/mem0_backend.py`
-- [ ] `add`/`search`/`recent` for `eve/memory/procedural.py` and `eve/memory/episodic.py`
+- [DONE] `add`/`search`/`recent` for `eve/memory/procedural.py` and `eve/memory/episodic.py`
 - [ ] Context assembly in `eve/memory/working.py` (`render`)
 - [ ] Recall blending + write policy in `eve/memory/manager.py` (`recall`, `remember`)
 - [ ] Confirm/tune `eve/memory/schema.sql` (embedding dimension, indexes)
