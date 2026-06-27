@@ -16,7 +16,7 @@ class VoiceActivityDetector:
     # Common frame durations webrtcvad accepts (ms). 30ms is a good default.
     FRAME_MS = 30
 
-    def __init__(self, sample_rate: int = 16_000, aggressiveness: int = 2) -> None:
+    def __init__(self, sample_rate: int = 16_000, aggressiveness: int = 3) -> None:
         """Create a VAD.
 
         aggressiveness: 0 (most permissive) .. 3 (most aggressive at filtering
