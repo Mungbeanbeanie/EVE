@@ -37,14 +37,17 @@ class WorkingMemory:
         """Build the final message list sent to the LLM.
 
         This is where short-term (working) and long-term (retrieved) memory meet.
+        Token budgeting / overflow summarisation is not yet implemented.
         """
-        # TODO(eve): 1. Start from self.snapshot().
-        # TODO(eve): 2. Weave in `retrieved` long-term memories — e.g. as a system
-        #               note ("Relevant things you remember: ...") placed before the
-        #               latest user turn so the model uses them.
-        # TODO(eve): 3. Enforce a token budget: if too long, summarize or drop the
-        #               oldest turns (this is why max_turns alone isn't enough).
-        # TODO(eve): 4. Return the assembled list[Message].
-        raise NotImplementedError(
-            "Implement context assembly — see eve/memory/working.py:render"
-        )
+        curr_messages = self.snapshot()
+        if retrieved:
+            retrieved_content = "\n".join(f"- {msg['content']}" for msg in retrieved)
+            memory_note: Message = {
+                "role": "system",
+                "content": f"Relevant things you remember:\n{retrieved_content}",
+            }
+            if curr_messages and curr_messages[-1]["role"] == "user":
+                curr_messages.insert(-1, memory_note)
+            else:
+                curr_messages.append(memory_note)
+        return curr_messages
