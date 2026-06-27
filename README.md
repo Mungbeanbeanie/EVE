@@ -57,13 +57,20 @@ tests/                 smoke tests (skeleton wiring only)
 - **System packages** (not pip): `portaudio` (for PyAudio); `ffmpeg` is optional but handy.
   - macOS: `brew install portaudio` (and `brew install ffmpeg` if you want it)
   - Debian/Ubuntu: `apt-get install portaudio19-dev espeak` (+ `ffmpeg`)
-- **Postgres + pgvector** — easiest via Docker (below).
+- **Postgres + pgvector** — easiest via Docker (below). Backs long-term memory.
+- **[Ollama](https://ollama.com)** running locally — supplies the **embedder** for
+  memory. The default config uses `nomic-embed-text` (768-dim, matches `schema.sql`).
 - An **LLM API key** for whatever provider you choose (or a local Ollama model).
 - **No torch / no GPU needed** — STT uses **faster-whisper** (CTranslate2), which runs on
   CPU and works on Intel macOS where PyTorch no longer ships wheels.
 
 > ⚠️ Voice mode needs host mic/speaker access, so run it on your **host machine**, not
 > inside Docker. Docker is best for Postgres and for text mode.
+
+> 💡 **Memory is optional to boot.** If Postgres or Ollama isn't up, EVE detects it
+> in ~2s and degrades gracefully — the conversation still runs on working
+> (in-session) memory; only durable recall across sessions is skipped. So you can
+> start with just an LLM key and add the memory stack later.
 
 ---
 
@@ -72,16 +79,39 @@ tests/                 smoke tests (skeleton wiring only)
 ### 1. Database (Docker)
 
 ```bash
-docker compose up db          # starts Postgres with pgvector + runs schema.sql
+docker compose up -d db       # starts Postgres with pgvector + runs schema.sql
 ```
 
-### 2. Configure
+`-d` runs it in the background. Use plain `docker compose up db` to watch its logs.
+First start runs `eve/memory/schema.sql` (creates the `vector` extension); mem0
+then manages its own `mem0` table for the procedural/episodic memories.
+
+### 2. Embedder (Ollama)
+
+Memory embeds text with a local Ollama model. Start Ollama and pull the model once:
 
 ```bash
-cp .env.example .env          # then fill in LLM_MODEL + key, etc.
+ollama pull nomic-embed-text  # one-time; 768-dim, matches schema.sql
+ollama serve                  # (Ollama Desktop starts this for you)
 ```
 
-### 3. Install + run (host)
+### 3. Configure
+
+```bash
+cp .env.example .env          # then fill in LLM_PROVIDER/LLM_MODEL + key
+```
+
+Two things to know about `.env`:
+
+- **`DATABASE_URL` host:** use `localhost` when running EVE on your host
+  (`postgresql://eve:eve@localhost:5432/eve`). The committed example uses `db`,
+  which is the Docker Compose service name — only correct when EVE itself runs in
+  a container.
+- **`LLM_MODEL` format:** it's a LiteLLM model string, `provider/model`
+  (e.g. `groq/llama-3.3-70b-versatile`, `anthropic/claude-opus-4-8`). EVE strips
+  the `provider/` prefix automatically where mem0's native client needs the bare name.
+
+### 4. Install + run (host)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -89,6 +119,11 @@ pip install -r requirements.txt   # core: LLM + memory + tools (no audio stack)
 
 python main.py --mode text        # fastest path: develop the brain without audio
 ```
+
+In text mode, each turn responds as soon as the LLM replies — durable memory is
+written in the **background**, so a slow mem0 write never blocks the conversation.
+On exit, EVE flushes any in-flight writes so the last turn isn't lost (this can add
+a short pause when you quit).
 
 The **voice stack is optional and installed separately** (it needs system audio
 support and is the last MVP piece). When you're ready:

@@ -1,12 +1,13 @@
-"""Smoke tests — prove the SKELETON wires together.
+"""Smoke tests — prove the wiring holds together.
 
-These intentionally do NOT exercise real STT/LLM/memory/tool behavior (that logic
-is yours to implement). They check that classes construct, the registry works, the
-LLM factory resolves a provider, and that unimplemented stubs fail loudly with
-NotImplementedError (so you always know what's left to build).
+These don't hit real STT/LLM/audio. They check that classes construct, the registry
+and executor work, the LLM factory resolves a provider, and that the memory façade
+degrades gracefully (and writes non-blocking) when the backend DB is unreachable.
 """
 
 from __future__ import annotations
+
+import time
 
 import pytest
 
@@ -116,5 +117,24 @@ async def test_remember_degrades_when_backend_unreachable(config):
     cfg = config.model_copy(update={"database_url": _UNREACHABLE_DB})
     mem = MemoryManager.from_config(cfg)
     await mem.remember(user="hello", assistant="hi there")
+    # Working memory updates synchronously, even though long-term persistence runs
+    # in the background and will fail (no DB).
     snapshot = mem.working.snapshot()
     assert {"role": "assistant", "content": "hi there"} in snapshot
+    # flush() awaits the (failing) background write without raising.
+    await mem.flush()
+
+
+async def test_remember_is_non_blocking(config):
+    """remember() returns immediately; durable persistence happens in the background.
+
+    With an unreachable DB the background write blocks ~2s on the preflight
+    timeout — remember() itself must return far faster than that.
+    """
+    cfg = config.model_copy(update={"database_url": _UNREACHABLE_DB})
+    mem = MemoryManager.from_config(cfg)
+    start = time.perf_counter()
+    await mem.remember(user="ping", assistant="pong")
+    elapsed = time.perf_counter() - start
+    assert elapsed < 0.5, f"remember() blocked for {elapsed:.2f}s — not backgrounded"
+    await mem.flush()  # let the background write settle before the loop closes

@@ -36,6 +36,9 @@ class MemoryManager:
         self.working = working
         self.procedural = procedural
         self.episodic = episodic
+        # In-flight background persistence tasks. asyncio only keeps weak refs to
+        # tasks, so we hold strong refs here to stop them being GC'd mid-write.
+        self._pending: set[asyncio.Task] = set()
 
     @classmethod
     def from_config(cls, config: Config) -> "MemoryManager":
@@ -72,15 +75,24 @@ class MemoryManager:
 
     # ── Write ────────────────────────────────────────────────────────────────
     async def remember(self, *, user: str, assistant: str) -> None:
-        """Persist a completed turn across the appropriate layers.
+        """Record a completed turn.
 
-        The caller (Agent) already appended the user message to working memory
-        before recall so the LLM could see it; here we only append the assistant
-        reply. Long-term persistence is best-effort so a missing/unreachable
-        backend never loses the live conversation.
+        Working memory is updated synchronously (the next turn's recall needs it
+        immediately). The slow long-term persistence — mem0 runs LLM fact
+        extraction + embedding, which can take tens of seconds — is fired off in
+        the background so it never blocks the conversation. Long-term memory is
+        therefore eventually consistent: a fact written this turn may not be
+        vector-searchable until its background write finishes. Call `flush()` to
+        await outstanding writes (the Agent does this on shutdown).
         """
         self.working.add_assistant(assistant)
 
+        task = asyncio.create_task(self._persist_longterm(user=user, assistant=assistant))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def _persist_longterm(self, *, user: str, assistant: str) -> None:
+        """Best-effort durable write of one turn (runs in the background)."""
         try:
             await self.episodic.add(f"User: {user}\nEVE: {assistant}")
 
@@ -88,3 +100,12 @@ class MemoryManager:
                 await self.procedural.add(f"User: {user}\nEVE: {assistant}")
         except Exception as exc:  # backend down / not configured — degrade, don't die
             log.warning("Long-term persistence unavailable, skipping: %s", exc)
+
+    async def flush(self) -> None:
+        """Wait for any in-flight background persistence to finish.
+
+        Call before shutdown so the last turn(s) aren't lost when the event loop
+        closes. Safe to call when nothing is pending.
+        """
+        if self._pending:
+            await asyncio.gather(*self._pending, return_exceptions=True)

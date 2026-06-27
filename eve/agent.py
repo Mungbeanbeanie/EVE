@@ -86,10 +86,15 @@ class Agent:
         """Run the agent in the requested mode until interrupted."""
         self._running = True
         log.info("EVE starting in %s mode (model=%s)", mode, self.config.llm_model)
-        if mode == "voice":
-            await self.run_voice()
-        else:
-            await self.run_text()
+        try:
+            if mode == "voice":
+                await self.run_voice()
+            else:
+                await self.run_text()
+        finally:
+            # remember() persists long-term memory in the background; make sure any
+            # in-flight writes finish before the event loop tears down.
+            await self.memory.flush()
 
     async def run_voice(self) -> None:
         """Voice loop: Mic -> STT -> sanitize -> LLM -> TTS -> Speaker."""
