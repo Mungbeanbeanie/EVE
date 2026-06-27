@@ -135,14 +135,14 @@ agent from the inside out (text + brain first, audio last).
 **LLM (provider-agnostic)**
 - [DONE] Tool-use loop in `eve/llm/litellm_client.py` (`respond`)
 - [ ] (optional) Direct vendor clients in `eve/llm/providers.py`
-- [ ] Harden input handling in `eve/llm/sanitize.py`
+- [DONE] Harden input handling in `eve/llm/sanitize.py`
 
 **Memory (working + procedural + episodic)**
 - [DONE] Wire mem0 → pgvector in `eve/memory/mem0_backend.py`
 - [DONE] `add`/`search`/`recent` for `eve/memory/procedural.py` and `eve/memory/episodic.py`
 - [DONE] Context assembly in `eve/memory/working.py` (`render`)
 - [DONE] Recall blending + write policy in `eve/memory/manager.py` (`recall`, `remember`)
-- [DONE] Confirm/tune `eve/memory/schema.sql` (embedding dimension, indexes)
+- [ ] Confirm/tune `eve/memory/schema.sql` (embedding dimension, indexes)
 
 **Tools (Google first, Microsoft later)**
 - [ ] Register adapters in `Agent.from_config` (`eve/agent.py`)
@@ -151,8 +151,8 @@ agent from the inside out (text + brain first, audio last).
 - [ ] Microsoft Graph handlers in `eve/tools/adapters/microsoft.py`
 
 **Voice pipeline (do last)**
-- [ ] VAD frames in `eve/pipeline/vad.py`
-- [ ] Mic capture + playback in `eve/pipeline/audio_io.py`
+- [DONE] VAD frames in `eve/pipeline/vad.py`
+- [DONE] Mic capture + playback in `eve/pipeline/audio_io.py`
 - [ ] faster-whisper load + transcribe in `eve/pipeline/stt.py`
 - [ ] pyttsx3 synthesis in `eve/pipeline/tts.py`
 
