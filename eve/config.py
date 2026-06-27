@@ -45,6 +45,8 @@ class Config(BaseSettings):
     google_client_secret: str | None = None
     google_token_path: str = "./.secrets/google_token.json"
     microsoft_client_id: str | None = None
+    microsoft_tenant_id: str = "common"  # "common" | "organizations" | a tenant GUID
+    microsoft_token_cache_path: str = "./.secrets/microsoft_token.json"
 
     # ── Misc ─────────────────────────────────────────────────────────────────
     log_level: str = "INFO"

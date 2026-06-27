@@ -192,9 +192,52 @@ To enable them:
 > **Re-consent after changing scopes.** If you edit `SCOPES`, delete the cached
 > token file so EVE runs the consent flow again with the new permissions.
 
-> ⚠️ `calendar_create_event` **writes** to your calendar. The shared confirmation /
-> destructive-action guard in `eve/tools/executor.py` is still a TODO, so today the
-> model can create events without an explicit confirmation step.
+> ⚠️ `calendar_create_event` **writes** to your calendar, so it's flagged
+> `destructive=True`. Before any destructive tool runs, EVE pauses and asks you to
+> confirm over the current channel — a `[y/N]` prompt in text mode, or a spoken
+> "shall I go ahead?" in voice mode (`Agent._confirm_destructive` in `eve/agent.py`).
+> Anything that isn't a clear yes is treated as a decline.
+
+### Microsoft 365 tools (optional)
+
+EVE can also search Outlook mail, list/create Outlook Calendar events, and list
+OneDrive files via [Microsoft Graph](https://learn.microsoft.com/graph/) — exposed
+as the tools `outlook_search`, `outlook_list_events`, `outlook_create_event`, and
+`onedrive_list_files`. Like the Google tools, they return a structured
+`{"error": ...}` until configured, so nothing crashes.
+
+Auth uses MSAL's **device-code flow**: a public client (no client secret, no
+redirect server), so all you need is an app **client ID**.
+
+1. **Register an app** in the [Azure / Entra portal](https://entra.microsoft.com/):
+   - **Identity → Applications → App registrations → New registration**. Give it a
+     name; for **Supported account types** pick what fits (personal-only, your org,
+     or "any org + personal").
+   - On the app's **Authentication** page, enable **Allow public client flows**
+     (this is what permits the device-code flow).
+   - **API permissions → Add a permission → Microsoft Graph → Delegated** and add
+     `Mail.Read`, `Calendars.ReadWrite`, `Files.Read` (the `SCOPES` in
+     `eve/tools/adapters/microsoft.py`). Grant consent.
+2. **Add the settings to `.env`:**
+
+   ```env
+   MICROSOFT_CLIENT_ID=00000000-0000-0000-0000-000000000000   # the app's Application (client) ID
+   MICROSOFT_TENANT_ID=common                                 # "common" | "organizations" | your tenant GUID
+   MICROSOFT_TOKEN_CACHE_PATH=./.secrets/microsoft_token.json  # where the cached token lives
+   ```
+
+   Use `common` for personal Microsoft accounts (or a mix); use your **tenant GUID**
+   (or `organizations`) to restrict sign-in to your work/school directory.
+3. **First run signs in once.** The first time EVE calls a Microsoft tool it prints a
+   short code and a URL (`microsoft.com/devicelogin`); enter the code in any browser
+   to grant access. The token is cached at `MICROSOFT_TOKEN_CACHE_PATH` and
+   auto-refreshed on later runs.
+
+> **Re-consent after changing scopes.** If you edit `SCOPES`, delete the cached
+> token file so the next run re-runs the device-code flow with the new permissions.
+
+> ⚠️ `outlook_create_event` **writes** to your calendar and is flagged
+> `destructive=True` — same confirmation guard as the Google calendar tool above.
 
 ---
 
@@ -219,7 +262,7 @@ agent from the inside out (text + brain first, audio last).
 - [DONE] Register adapters in `Agent.from_config` (`eve/agent.py`)
 - [DONE] OAuth + Gmail/Calendar/Drive handlers in `eve/tools/adapters/google.py`
 - [DONE] Argument validation + destructive-action guard in `eve/tools/executor.py`
-- [ ] Microsoft Graph handlers in `eve/tools/adapters/microsoft.py`
+- [DONE] Microsoft Graph handlers in `eve/tools/adapters/microsoft.py`
 
 **Voice pipeline (do last)**
 - [DONE] VAD frames in `eve/pipeline/vad.py`

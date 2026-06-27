@@ -14,6 +14,7 @@ go fill in — so you can build the agent one piece at a time and always run it.
 from __future__ import annotations
 
 import logging
+import re
 
 from eve.config import Config
 from eve.llm.factory import build_llm
@@ -53,7 +54,12 @@ class Agent:
         self.memory = memory
         self.tools = tools
         self.executor = executor
+        # Gate destructive tools (e.g. creating a calendar event) behind a yes/no
+        # prompt over the active channel. The executor calls this back before running
+        # any tool flagged destructive=True; returning False cancels the call.
+        self.executor.confirmer = self._confirm_destructive
         self._running = False
+        self._speak = False  # tracks the active channel (voice vs text) for prompts
 
     # ── Construction ─────────────────────────────────────────────────────────
     @classmethod
@@ -122,6 +128,10 @@ class Agent:
         Wraps the pipeline so an unimplemented stub becomes a friendly hint rather
         than a crash — letting you build EVE incrementally.
         """
+        # Remember which channel this turn uses so a mid-turn confirmation prompt
+        # (triggered by the LLM calling a destructive tool) reaches the user the same
+        # way they're talking to EVE.
+        self._speak = speak
         try:
             text = sanitize(text)
             self.memory.working.add_user(text)
@@ -148,3 +158,49 @@ class Agent:
         except NotImplementedError as exc:
             log.warning("Not implemented yet → %s", exc)
             print(f"[EVE stub] {exc}")
+
+    # ── Destructive-action confirmation ───────────────────────────────────────
+    # Word-level matches (not substrings) so "now"/"know" don't read as "no".
+    _AFFIRMATIVE = frozenset(
+        {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm",
+         "affirmative", "correct", "proceed", "y"}
+    )
+    _NEGATIVE = frozenset(
+        {"no", "nope", "nah", "cancel", "stop", "abort", "negative", "dont", "n"}
+    )
+
+    async def _confirm_destructive(self, name: str, arguments: dict) -> bool:
+        """Ask the user to approve a destructive tool call before it runs.
+
+        Wired into the ToolExecutor: any tool flagged ``destructive=True`` pauses
+        here for an explicit yes/no, delivered over whichever channel (voice or text)
+        the current turn is using. Anything that isn't clearly affirmative is treated
+        as a decline — the safe default for an action with real-world side effects.
+        """
+        prompt = f"You asked me to run '{name}' with {arguments}. Shall I go ahead?"
+        answer = await self._ask_voice(prompt) if self._speak else self._ask_text(prompt)
+        approved = self._is_affirmative(answer)
+        log.info("Destructive tool '%s' %s", name, "approved" if approved else "declined")
+        return approved
+
+    def _ask_text(self, prompt: str) -> str:
+        """Prompt for confirmation over stdin and return the raw answer."""
+        try:
+            return input(f"eve > {prompt} [y/N] ").strip()
+        except EOFError:
+            return ""  # no input stream → treat as decline
+
+    async def _ask_voice(self, prompt: str) -> str:
+        """Speak the confirmation prompt, then capture and transcribe the reply."""
+        await self.tts.speak(prompt)
+        audio = await self.audio.record_utterance()
+        return await self.stt.transcribe(audio)
+
+    def _is_affirmative(self, answer: str) -> bool:
+        """Decide if a free-form answer is a clear yes (default: no)."""
+        words = set(re.findall(r"[a-z']+", answer.lower()))
+        if words & self._NEGATIVE:
+            return False  # any explicit "no" word wins
+        if "go" in words and "ahead" in words:
+            return True
+        return bool(words & self._AFFIRMATIVE)
