@@ -1,0 +1,44 @@
+# EVE local stack: the app + a pgvector-enabled Postgres for memory.
+#
+# Usage:
+#   docker compose up db          # just the database (recommended while you
+#                                 #   run EVE on the host for voice support)
+#   docker compose up --build     # app (text mode) + database together
+
+services:
+  db:
+    # pgvector image ships Postgres with the `vector` extension available.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: eve
+      POSTGRES_PASSWORD: eve
+      POSTGRES_DB: eve
+    ports:
+      - "5432:5432"
+    volumes:
+      - eve_pgdata:/var/lib/postgresql/data
+      # schema.sql runs ONCE on first init: creates the vector extension + tables.
+      - ./eve/memory/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eve -d eve"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  eve:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    # Override DATABASE_URL host to reach the `db` service on the compose network.
+    environment:
+      DATABASE_URL: postgresql://eve:eve@db:5432/eve
+    # Text mode by default (see Dockerfile CMD). For an interactive REPL:
+    #   docker compose run --rm eve python main.py --mode text
+    stdin_open: true
+    tty: true
+
+volumes:
+  eve_pgdata:

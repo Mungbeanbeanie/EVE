@@ -1,0 +1,38 @@
+# ─── EVE runtime dependencies ────────────────────────────────────────────────
+# Pinned loosely (>=) so you can learn against current docs. Tighten before prod.
+
+# LLM — provider-agnostic. LiteLLM gives ONE interface to Anthropic, OpenAI,
+# Gemini, Ollama, etc. You do NOT need a provider SDK unless you write a direct
+# client in eve/llm/providers.py (those imports are lazy, so missing SDKs are fine).
+litellm>=1.40
+
+# Config / env
+python-dotenv>=1.0
+pydantic-settings>=2.2
+
+# Speech-to-text (local). portaudio is a SYSTEM package (PyAudio) — see README.
+# faster-whisper runs Whisper via CTranslate2 (NO torch) — works on Intel macOS,
+# CPU-friendly, and often faster than openai-whisper. Pass it a numpy PCM array.
+faster-whisper>=1.0
+webrtcvad>=2.0.10    # voice-activity / silence detection
+pyaudio>=0.2.14      # raw mic capture + speaker playback
+
+# Text-to-speech (local)
+pyttsx3>=2.90
+
+# Memory — mem0 manages vector memory; backed by Postgres + pgvector
+mem0ai>=0.1.0
+psycopg[binary]>=3.1
+pgvector>=0.2.5
+numpy>=1.26
+
+# Tools — Google first (Microsoft adapter is stubbed)
+google-api-python-client>=2.120
+google-auth>=2.29
+google-auth-oauthlib>=1.2
+msal>=1.28           # Microsoft Graph auth (adapter scaffolded for later)
+
+# ─── Dev / test ──────────────────────────────────────────────────────────────
+pytest>=8.0
+pytest-asyncio>=0.23
+ruff>=0.4
