@@ -5,8 +5,8 @@ has real tools (email, calendar, files), a malicious or garbled instruction can 
 damage — this is your first line of defense. Keep it conservative: clean obvious
 junk, flag suspicious instructions, but don't mangle normal speech.
 """
-import re
 from __future__ import annotations
+import re
 
 
 def sanitize(text: str) -> str:

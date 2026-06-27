@@ -23,37 +23,37 @@ class Mem0Backend:
         self._config = config
         self._memory = None  # lazy: don't connect to the DB until first use
 
-def client(self) -> Memory:
-    """Return the shared mem0 Memory client, building it on first call."""
-    if self._memory is not None:
+    def client(self) -> Memory:
+        """Return the shared mem0 Memory client, building it on first call."""
+        if self._memory is not None:
+            return self._memory
+
+        llm_cfg: dict = {
+            "model": self._config.llm_model,
+            "api_key": self._config.llm_api_key,
+        }
+        if self._config.llm_api_base:
+            llm_cfg["api_base"] = self._config.llm_api_base
+
+        cfg = {
+            "vector_store": {
+                "provider": "pgvector",
+                "config": {
+                    "connection_string": self._config.database_url,
+                    "embedding_model_dims": 768,
+                },
+            },
+            "llm": {
+                "provider": self._config.llm_provider,
+                "config": llm_cfg,
+            },
+            "embedder": {
+                "provider": self._config.embedder_provider,
+                "config": {
+                    "model": self._config.embedder_model,
+                    "ollama_base_url": self._config.embedder_base_url,
+                },
+            },
+        }
+        self._memory = Memory.from_config(cfg)
         return self._memory
-
-    llm_cfg: dict = {
-        "model": self._config.llm_model,
-        "api_key": self._config.llm_api_key,
-    }
-    if self._config.llm_api_base:
-        llm_cfg["api_base"] = self._config.llm_api_base
-
-    cfg = {
-        "vector_store": {
-            "provider": "pgvector",
-            "config": {
-                "url": self._config.database_url,
-                "embedding_model_dims": 768,
-            },
-        },
-        "llm": {
-            "provider": self._config.llm_provider,
-            "config": llm_cfg,
-        },
-        "embedder": {
-            "provider": self._config.embedder_provider,
-            "config": {
-                "model": self._config.embedder_model,
-                "ollama_base_url": self._config.embedder_base_url,
-            },
-        },
-    }
-    self._memory = Memory.from_config(cfg)
-    return self._memory

@@ -35,7 +35,9 @@ class ProceduralMemory(MemoryStore):
     async def search(self, query: str, k: int = 5) -> list[MemoryRecord]:
         """Return preferences/skills relevant to `query`."""
         mem = self.backend.client()
-        raw = await asyncio.to_thread(mem.search, query, user_id=PROCEDURAL_NS, limit=k)
+        raw = await asyncio.to_thread(
+            mem.search, query, filters={"user_id": PROCEDURAL_NS}, top_k=k
+        )
         hits = raw.get("results", raw) if isinstance(raw, dict) else raw
         return [
             MemoryRecord(
@@ -50,7 +52,9 @@ class ProceduralMemory(MemoryStore):
     async def recent(self, n: int = 10) -> list[MemoryRecord]:
         """Return recently-learned preferences/skills."""
         mem = self.backend.client()
-        raw = await asyncio.to_thread(mem.get_all, user_id=PROCEDURAL_NS)
+        raw = await asyncio.to_thread(
+            mem.get_all, filters={"user_id": PROCEDURAL_NS}, top_k=n
+        )
         hits = raw.get("results", raw) if isinstance(raw, dict) else raw
         return [
             MemoryRecord(

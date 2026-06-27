@@ -22,7 +22,8 @@ pyttsx3>=2.90
 
 # Memory — mem0 manages vector memory; backed by Postgres + pgvector
 mem0ai>=0.1.0
-psycopg[binary]>=3.1
+groq>=1.0             # required when llm_provider=groq
+psycopg[binary,pool]>=3.1
 pgvector>=0.2.5
 numpy>=1.26
 

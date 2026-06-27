@@ -35,7 +35,9 @@ class EpisodicMemory(MemoryStore):
     async def search(self, query: str, k: int = 5) -> list[MemoryRecord]:
         """Return past events most relevant to `query`."""
         mem = self.backend.client()
-        raw = await asyncio.to_thread(mem.search, query, user_id=EPISODIC_NS, limit=k)
+        raw = await asyncio.to_thread(
+            mem.search, query, filters={"user_id": EPISODIC_NS}, top_k=k
+        )
         hits = raw.get("results", raw) if isinstance(raw, dict) else raw
         return [
             MemoryRecord(
@@ -50,7 +52,9 @@ class EpisodicMemory(MemoryStore):
     async def recent(self, n: int = 10) -> list[MemoryRecord]:
         """Return the most recent events, newest first."""
         mem = self.backend.client()
-        raw = await asyncio.to_thread(mem.get_all, user_id=EPISODIC_NS)
+        raw = await asyncio.to_thread(
+            mem.get_all, filters={"user_id": EPISODIC_NS}, top_k=max(n, 100)
+        )
         hits = raw.get("results", raw) if isinstance(raw, dict) else raw
         hits = sorted(hits, key=lambda h: h.get("created_at") or "", reverse=True)
         return [
