@@ -84,6 +84,9 @@ class EveWindow {
       statusDot: document.getElementById('status-dot'),
       statusLabel: document.getElementById('status-label'),
       chips: Array.from(document.querySelectorAll('.eve-chip')),
+      composeForm: document.getElementById('compose-form'),
+      textInput: document.getElementById('text-input'),
+      textSend: document.getElementById('text-send'),
     };
   }
 
@@ -91,17 +94,17 @@ class EveWindow {
     this.el.segPtt.addEventListener('click', () => this.setMode('ptt'));
     this.el.segAlways.addEventListener('click', () => this.setMode('always'));
 
-    // Push-to-talk: hold to listen, release to send.
-    const press = (e) => { e.preventDefault(); this._ensureMic(); this.press(); };
-    const release = () => this.release();
-    this.el.ptt.addEventListener('mousedown', press);
-    this.el.ptt.addEventListener('mouseup', release);
-    this.el.ptt.addEventListener('mouseleave', release);
-    this.el.ptt.addEventListener('touchstart', press, { passive: false });
-    this.el.ptt.addEventListener('touchend', release);
+    // Push-to-talk → real server-side capture. The Python server does its own
+    // VAD-segmented capture, so a single tap is enough (no press-and-hold).
+    // The authoritative orb state still arrives over SSE; this only kicks off
+    // capture and shows a brief local "Listening…" affordance for responsiveness.
+    this.el.ptt.addEventListener('click', () => this.requestListen());
 
     this.el.mute.addEventListener('click', () => this.toggleMute());
     this.el.demo.addEventListener('click', () => { this._ensureMic(); this.demoReply(); });
+
+    // Type-to-EVE: submit a typed prompt to the agent (POST ./input).
+    this.el.composeForm.addEventListener('submit', (e) => this.submitText(e));
 
     this.el.chips.forEach((chip) =>
       chip.addEventListener('click', () => this.setAnim(chip.dataset.state))
@@ -149,10 +152,11 @@ class EveWindow {
     this.el.segPtt.setAttribute('aria-selected', String(this.mode === 'ptt'));
     this.el.segAlways.setAttribute('aria-selected', String(this.mode === 'always'));
 
-    // ptt held appearance
+    // ptt active appearance — highlighted while EVE is listening (driven by SSE
+    // or by the brief local pending affordance after a tap).
     const held = this.mode === 'ptt' && this.anim === 'listening';
     this.el.ptt.classList.toggle('is-held', held);
-    this.el.pttLabel.textContent = held ? 'Listening… release to send' : 'Hold to talk';
+    this.el.pttLabel.textContent = held ? 'Listening…' : 'Tap to talk';
 
     // mute appearance
     this.el.mute.classList.toggle('is-muted', this.muted);
@@ -176,18 +180,38 @@ class EveWindow {
     if (mode === 'always') this._ensureMic();
   }
 
-  press() {
-    this._clearTimers();
+  // ---- real input channel (browser → backend) -----------------------------
+  // Ask the server to capture one microphone utterance (server-side VAD). The
+  // orb's real state comes back over SSE; we only show a brief local "listening"
+  // affordance so the tap feels responsive even before the stream catches up.
+  requestListen() {
+    this._postJSON('./control', { action: 'listen' });
     this.setAnim('listening');
   }
 
-  release() {
-    if (this.anim !== 'listening' || this.mode !== 'ptt') return;
-    this._clearTimers();
-    this.setAnim('thinking');
-    const { thinkingDelayMs, replyDurationMs } = this.timings;
-    this._timers.push(setTimeout(() => this.setAnim('speaking'), thinkingDelayMs));
-    this._timers.push(setTimeout(() => this.setAnim('idle'), thinkingDelayMs + replyDurationMs));
+  // Submit a typed prompt to the agent. Clears + refocuses the field so the
+  // user can keep typing; the SSE stream drives the resulting orb state.
+  submitText(event) {
+    event.preventDefault();
+    const text = this.el.textInput.value.trim();
+    if (!text) return;
+    this._postJSON('./input', { text });
+    this.el.textInput.value = '';
+    this.el.textInput.focus();
+  }
+
+  // POST JSON to a backend endpoint. Network errors are swallowed (logged) so a
+  // missing/offline backend never throws — the page stays usable standalone.
+  async _postJSON(path, body) {
+    try {
+      await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      console.warn(`EVE: POST ${path} failed`, err);
+    }
   }
 
   demoReply() {
@@ -259,6 +283,15 @@ class EveWindow {
 }
 
 loadConfig().then((config) => {
+  // When the page is loaded inside the native macOS window the host appends
+  // ?embedded=1. In that case strip the page's own fake window chrome (titlebar,
+  // glass frame, desktop backdrop) so the real OS window provides the frame and
+  // we don't get a window-inside-a-window. Standalone browser preview omits the
+  // flag and keeps its full look. See the `.embedded` rules in styles.css.
+  if (new URLSearchParams(location.search).get('embedded') === '1') {
+    document.body.classList.add('embedded');
+  }
+
   // eslint-disable-next-line no-new
   new EveWindow(config);
 });

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 
 import pyttsx3
 
@@ -25,6 +26,49 @@ from eve.config import Config
 from eve.pipeline.base import TTSEngine
 
 log = logging.getLogger(__name__)
+
+
+class MacSayTTS(TTSEngine):
+    """Local TTS on macOS via the built-in ``say`` command.
+
+    pyttsx3's macOS driver (``NSSpeechSynthesizer``) is unreliable off the main
+    thread — and EVE's window mode runs the whole agent loop on a worker thread —
+    so a reused engine can hang or synthesize silence. The ``say`` binary is a
+    separate process with no run-loop constraints, so it produces audio from any
+    thread. We stream it via :func:`asyncio.create_subprocess_exec`, which keeps
+    the event loop free while the OS speaks.
+
+    Honors ``TTS_VOICE`` as the ``say -v`` voice name; an unknown name makes
+    ``say`` fall back to the system default rather than failing the turn.
+    """
+
+    def __init__(self, config: Config) -> None:
+        self.config = config
+
+    async def speak(self, text: str) -> None:
+        """Synthesize and play `text` by piping it to the macOS `say` binary."""
+        if not text.strip():
+            return
+        args = ["say"]
+        voice = (self.config.tts_voice or "").strip()
+        if voice:
+            args += ["-v", voice]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                text,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                log.warning(
+                    "macOS `say` exited %s: %s",
+                    proc.returncode,
+                    stderr.decode("utf-8", "replace").strip(),
+                )
+        except FileNotFoundError:  # `say` missing (non-macOS) — should not happen
+            log.warning("macOS `say` not found; no speech produced for this turn.")
 
 
 class Pyttsx3TTS(TTSEngine):
@@ -162,14 +206,27 @@ class ElevenLabsTTS(TTSEngine):
             stream.close()
 
 
+def _build_local_tts(config: Config) -> TTSEngine:
+    """Pick the most reliable offline engine for the platform.
+
+    macOS gets :class:`MacSayTTS` (subprocess ``say``) because it works from any
+    thread — critical for window mode, where the agent loop is off the main
+    thread and pyttsx3's NSSpeechSynthesizer goes silent. Everywhere else uses
+    pyttsx3 (SAPI5 / espeak), which is fine on its native drivers.
+    """
+    if sys.platform == "darwin":
+        return MacSayTTS(config)
+    return Pyttsx3TTS(config)
+
+
 def build_tts(config: Config) -> TTSEngine:
     """Select the TTS engine from config: ElevenLabs if a key is set, else local.
 
-    The local pyttsx3 engine is always constructed — both as the default and as
-    the runtime fallback for ElevenLabs — so EVE still talks if the optional SDK
-    is missing or a cloud request fails.
+    The local engine is always constructed — both as the default and as the
+    runtime fallback for ElevenLabs — so EVE still talks if the optional SDK is
+    missing or a cloud request fails.
     """
-    local = Pyttsx3TTS(config)
+    local = _build_local_tts(config)
     if not (config.elevenlabs_api_key or "").strip():
         return local
     try:

@@ -54,10 +54,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _run_agent_thread(agent: Agent, mode: str) -> None:
-    """Run the agent's asyncio loop on a worker thread (window mode)."""
+def _run_agent_thread(agent: Agent) -> None:
+    """Run the agent's asyncio loop on a worker thread (window mode).
+
+    Window mode always uses the UI-driven ``"window"`` loop: input arrives from
+    the window's text box / mic button via the bridge, not from stdin or the
+    terminal. The ``--mode`` flag only matters for headless runs.
+    """
     try:
-        asyncio.run(agent.start(mode=mode))
+        asyncio.run(agent.start(mode="window"))
     except KeyboardInterrupt:  # pragma: no cover - worker thread rarely sees this
         pass
 
@@ -65,22 +70,32 @@ def _run_agent_thread(agent: Agent, mode: str) -> None:
 def run_with_window(agent: Agent, args: argparse.Namespace) -> None:
     """Window mode: native UI on the main thread, agent on a worker thread."""
     from eve.ui import VizServer, launch_window
+    from eve.ui.bridge import InputBridge
 
-    viz = VizServer(port=args.window_port).start(open_browser=False)
+    # The bridge is the browser → agent channel; the server feeds it from POSTs
+    # and the agent consumes it in run_window().
+    bridge = InputBridge()
+    viz = VizServer(port=args.window_port, bridge=bridge).start(open_browser=False)
     agent.set_viz(viz)
+    agent.set_bridge(bridge)
 
     # The agent runs in the background; the window owns the main thread below.
-    worker = threading.Thread(
-        target=_run_agent_thread, args=(agent, args.mode), daemon=True
-    )
+    worker = threading.Thread(target=_run_agent_thread, args=(agent,), daemon=True)
     worker.start()
 
     def on_quit() -> None:
         agent.stop()
+        bridge.stop()  # unblock the agent's next_event() so the loop exits
         viz.stop()
 
+    # The native window loads the orb in "embedded" mode so the page drops its
+    # fake macOS chrome — the real OS window provides the frame and titlebar.
     ran_native = launch_window(
-        viz.url, title="EVE", hide_dock=not args.dock, menu_bar=True, on_quit=on_quit
+        viz.url + "?embedded=1",
+        title="EVE",
+        hide_dock=not args.dock,
+        menu_bar=True,
+        on_quit=on_quit,
     )
 
     # No native backend → the orb opened in a browser tab and launch_window
@@ -89,8 +104,7 @@ def run_with_window(agent: Agent, args: argparse.Namespace) -> None:
         try:
             worker.join()
         except KeyboardInterrupt:
-            agent.stop()
-            viz.stop()
+            on_quit()
 
 
 def main() -> None:

@@ -20,6 +20,10 @@ import queue
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from eve.ui.bridge import InputBridge
 
 log = logging.getLogger(__name__)
 
@@ -35,9 +39,19 @@ _VALID_STATES = frozenset({"idle", "listening", "thinking", "speaking"})
 class VizServer:
     """Hosts the EVE window and broadcasts agent state to connected browsers."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8765, accent: str = "amber") -> None:
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8765,
+        accent: str = "amber",
+        bridge: "InputBridge | None" = None,
+    ) -> None:
         self.host = host
         self.port = port
+        # Optional browser → agent channel. When attached, the window's text box
+        # and mic button POST here and the agent consumes the events; when absent
+        # those POSTs are simply rejected (the orb still works receive-only).
+        self.bridge = bridge
         self._state: dict[str, str] = {"state": "idle", "accent": accent}
         self._subscribers: set[queue.Queue[dict[str, str]]] = set()
         self._lock = threading.Lock()
@@ -121,6 +135,58 @@ def _make_handler(viz: VizServer) -> type[BaseHTTPRequestHandler]:
                 self._serve_events()
             else:
                 self._serve_static(path)
+
+        # ---- browser → agent input (text box + mic button) ----
+        def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+            path = self.path.split("?", 1)[0]
+            if path == "/input":
+                self._handle_input()
+            elif path == "/control":
+                self._handle_control()
+            else:
+                self.send_error(404, "Not Found")
+
+        def _read_json(self) -> dict:
+            """Parse the request body as JSON, or return {} on any problem."""
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except (TypeError, ValueError):
+                return {}
+            if length <= 0:
+                return {}
+            try:
+                return json.loads(self.rfile.read(length).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                return {}
+
+        def _handle_input(self) -> None:
+            """POST /input {"text": "..."} → queue a typed prompt for the agent."""
+            if viz.bridge is None:
+                self.send_error(503, "No agent attached")
+                return
+            text = str(self._read_json().get("text", "")).strip()
+            if not text:
+                self.send_error(400, "Empty text")
+                return
+            viz.bridge.submit_text(text)
+            self._send_no_content()
+
+        def _handle_control(self) -> None:
+            """POST /control {"action": "listen"} → ask the agent to capture a turn."""
+            if viz.bridge is None:
+                self.send_error(503, "No agent attached")
+                return
+            action = str(self._read_json().get("action", "")).strip()
+            if action != "listen":
+                self.send_error(400, "Unknown action")
+                return
+            viz.bridge.submit_control(action)
+            self._send_no_content()
+
+        def _send_no_content(self) -> None:
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         # ---- static window ----
         def _serve_static(self, path: str) -> None:

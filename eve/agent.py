@@ -65,11 +65,18 @@ class Agent:
         self.executor.confirmer = self._confirm_destructive
         self._running = False
         self._speak = False  # tracks the active channel (voice vs text) for prompts
+        # Optional browser → agent input channel (the window's text box + mic
+        # button). Set in window mode; drives run_window() instead of stdin/mic.
+        self.bridge = None
 
     # ── Visualizer ────────────────────────────────────────────────────────────
     def set_viz(self, viz) -> None:
         """Attach (or replace) the visualizer window driven by agent state."""
         self.viz = viz
+
+    def set_bridge(self, bridge) -> None:
+        """Attach the UI input channel that feeds the window-mode loop."""
+        self.bridge = bridge
 
     def _set_state(self, name: str) -> None:
         """Drive the orb to a pipeline state; a no-op when no window is attached."""
@@ -117,7 +124,9 @@ class Agent:
         self._running = True
         log.info("EVE starting in %s mode (model=%s)", mode, self.config.llm_model)
         try:
-            if mode == "voice":
+            if mode == "window":
+                await self.run_window()
+            elif mode == "voice":
                 await self.run_voice()
             else:
                 await self.run_text()
@@ -165,6 +174,44 @@ class Agent:
             if not text:
                 continue
             await self._handle_turn(text, speak=False)
+
+    async def run_window(self) -> None:
+        """UI-driven loop: input comes from the window, replies are spoken.
+
+        The window's text box and mic button POST to the visualizer server, which
+        hands events to us through the :class:`~eve.ui.bridge.InputBridge`. This
+        replaces stdin/terminal control entirely: a ``text`` event answers a typed
+        prompt, a ``control: listen`` event captures one spoken utterance (VAD —
+        no terminal Enter). Either way EVE speaks the reply so the window behaves
+        like a voice assistant.
+        """
+        if self.bridge is None:
+            raise RuntimeError("window mode requires a bridge; call set_bridge() first")
+        log.info("EVE window mode — type or tap to talk.")
+        self._set_state("idle")
+        while self._running:
+            event = await self.bridge.next_event()
+            kind = event.get("type")
+            if kind == "stop":
+                break
+            if kind == "text":
+                text = str(event.get("text", "")).strip()
+                if text:
+                    print(f"you > {text}")
+                    await self._handle_turn(text, speak=True)
+            elif kind == "control" and event.get("action") == "listen":
+                await self._listen_once()
+
+    async def _listen_once(self) -> None:
+        """Capture one VAD-segmented utterance from the mic and handle it."""
+        self._set_state("listening")
+        audio = await self.audio.record_utterance()
+        text = (await self.stt.transcribe(audio)).strip()
+        if not text:
+            self._set_state("idle")  # silence / noise → back to rest
+            return
+        print(f"you > {text}")
+        await self._handle_turn(text, speak=True)
 
     # ── One conversational turn ──────────────────────────────────────────────
     async def _handle_turn(self, text: str, *, speak: bool) -> None:

@@ -275,6 +275,55 @@ html, body {
   border: none;
 }
 
+/* ---- Compose row (type-to-EVE) ---- */
+.eve-compose {
+  display: flex;
+  gap: 8px;
+  margin-top: 11px;
+}
+.eve-compose__input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 12px 13px;
+  border-radius: var(--radius-button);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-panel-border);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease),
+              background var(--duration-fast) var(--ease),
+              box-shadow 0.2s var(--ease);
+}
+.eve-compose__input::placeholder { color: var(--color-text-faint); }
+.eve-compose__input:hover { background: var(--color-surface-active); }
+.eve-compose__input:focus {
+  background: var(--color-surface-active);
+  border-color: color-mix(in srgb, var(--accent-ring) 55%, transparent);
+  box-shadow: 0 0 0 3px var(--halo);
+}
+/* Send button — matches the accent-filled button styling (cf. .eve-demo) */
+.eve-compose__send {
+  flex: 0 0 auto;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 12px 16px;
+  border-radius: var(--radius-button);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-accent);
+  background: var(--accent-hex);
+  border: none;
+  transition: background var(--duration-fast) var(--ease),
+              transform 0.1s var(--ease),
+              box-shadow 0.2s var(--ease);
+}
+.eve-compose__send:hover {
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent-edge) 45%, transparent);
+}
+.eve-compose__send:active { transform: scale(0.975); }
+
 /* Preview scrub row */
 .eve-preview {
   display: flex;
@@ -308,6 +357,38 @@ html, body {
 .eve-chip.is-active {
   color: var(--color-text);
   background: var(--color-surface-active);
+}
+
+/* ============================================================
+   Embedded in the native window — strip the fake macOS chrome;
+   the real OS window provides the frame/titlebar. Toggled by
+   app.js adding `.embedded` to <body> when ?embedded=1 is set.
+   Only overrides geometry/decoration; the compose row and orb
+   are untouched and remain visible.
+   ============================================================ */
+.embedded .eve-titlebar { display: none; }     /* real titlebar belongs to the OS */
+.embedded .eve-preview { display: none; }       /* dev-only PREVIEW chips */
+
+/* Backdrop: remove the desktop ambience so the panel fills edge-to-edge */
+.embedded .eve-blob,
+.embedded .eve-grid { display: none; }
+
+/* Stage: drop the centering inset so nothing floats the panel */
+.embedded .eve-stage {
+  display: block;
+  background: #0c0d12; /* flat dark base, no radial desktop glow */
+}
+
+/* Panel: flatten the glass frame and let it fill the native window */
+.embedded .eve-panel {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 [hidden] { display: none !important; }

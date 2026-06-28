@@ -7,8 +7,14 @@ delegates to its fallback when a synthesis attempt fails.
 
 from __future__ import annotations
 
+import sys
+
 from eve.pipeline.base import TTSEngine
-from eve.pipeline.tts import ElevenLabsTTS, Pyttsx3TTS, build_tts
+from eve.pipeline.tts import ElevenLabsTTS, MacSayTTS, Pyttsx3TTS, build_tts
+
+# The local engine is platform-aware: macOS uses the thread-safe `say` binary,
+# everything else uses pyttsx3. Tests assert against whichever applies here.
+_LOCAL_ENGINE = MacSayTTS if sys.platform == "darwin" else Pyttsx3TTS
 
 
 class _RecordingTTS(TTSEngine):
@@ -22,23 +28,23 @@ class _RecordingTTS(TTSEngine):
 
 
 def test_build_tts_uses_local_when_no_key(config):
-    """No ELEVENLABS_API_KEY → the offline pyttsx3 engine."""
+    """No ELEVENLABS_API_KEY → the offline local engine for this platform."""
     cfg = config.model_copy(update={"elevenlabs_api_key": None})
-    assert isinstance(build_tts(cfg), Pyttsx3TTS)
+    assert isinstance(build_tts(cfg), _LOCAL_ENGINE)
 
 
 def test_build_tts_ignores_blank_key(config):
     """A whitespace-only key is treated as unset."""
     cfg = config.model_copy(update={"elevenlabs_api_key": "   "})
-    assert isinstance(build_tts(cfg), Pyttsx3TTS)
+    assert isinstance(build_tts(cfg), _LOCAL_ENGINE)
 
 
 def test_build_tts_uses_elevenlabs_when_key_set(config):
-    """A key present → ElevenLabs, with a local fallback wired in."""
+    """A key present → ElevenLabs, with the local engine wired in as fallback."""
     cfg = config.model_copy(update={"elevenlabs_api_key": "sk-test"})
     tts = build_tts(cfg)
     assert isinstance(tts, ElevenLabsTTS)
-    assert isinstance(tts.fallback, Pyttsx3TTS)
+    assert isinstance(tts.fallback, _LOCAL_ENGINE)
 
 
 async def test_elevenlabs_falls_back_on_error(config):

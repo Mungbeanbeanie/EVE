@@ -57,6 +57,20 @@
           <button class="eve-demo" id="demo-button">Demo reply</button>
         </div>
 
+        <!-- Type-to-EVE: real browser→backend input channel (POST ./input).
+             Visible in both standalone and embedded modes. -->
+        <form class="eve-compose" id="compose-form">
+          <input
+            class="eve-compose__input"
+            id="text-input"
+            type="text"
+            placeholder="Message EVE&hellip;"
+            autocomplete="off"
+            aria-label="Message EVE"
+          />
+          <button class="eve-compose__send" id="text-send" type="submit">Send</button>
+        </form>
+
         <!-- Preview scrub row (prototype affordance; drop in production) -->
         <div class="eve-preview">
           <span class="eve-preview__label">PREVIEW</span>
