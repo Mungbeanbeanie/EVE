@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EVE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- Outer ambience: the "desktop" the glass panel floats over -->
+  <div class="eve-stage">
+    <div class="eve-blob eve-blob--a"></div>
+    <div class="eve-blob eve-blob--b"></div>
+    <div class="eve-grid" aria-hidden="true"></div>
+
+    <!-- The glass panel -->
+    <main class="eve-panel" aria-label="EVE assistant">
+      <!-- Title bar -->
+      <header class="eve-titlebar">
+        <div class="eve-traffic" aria-hidden="true">
+          <span class="eve-dot eve-dot--close"></span>
+          <span class="eve-dot eve-dot--min"></span>
+          <span class="eve-dot eve-dot--max"></span>
+        </div>
+        <div class="eve-title">EVE</div>
+      </header>
+
+      <!-- Canvas stage + status line -->
+      <section class="eve-stage-canvas">
+        <canvas id="eve-canvas"></canvas>
+        <div class="eve-status">
+          <span class="eve-status__dot" id="status-dot"></span>
+          <span class="eve-status__label" id="status-label">READY</span>
+        </div>
+      </section>
+
+      <!-- Controls -->
+      <section class="eve-controls">
+        <!-- Mode segmented control -->
+        <div class="eve-segments" role="tablist" aria-label="Input mode">
+          <button class="eve-seg" id="seg-ptt" role="tab" aria-selected="true">Push&#8209;to&#8209;talk</button>
+          <button class="eve-seg" id="seg-always" role="tab" aria-selected="false">Always on</button>
+        </div>
+
+        <!-- Push-to-talk button (PTT mode) -->
+        <button class="eve-ptt" id="ptt-button" hidden>
+          <span class="eve-ptt__dot"></span>
+          <span class="eve-ptt__label" id="ptt-label">Hold to talk</span>
+        </button>
+
+        <!-- Always-on controls -->
+        <div class="eve-always" id="always-controls" hidden>
+          <button class="eve-mute" id="mute-button">Mute mic</button>
+          <button class="eve-demo" id="demo-button">Demo reply</button>
+        </div>
+
+        <!-- Preview scrub row (prototype affordance; drop in production) -->
+        <div class="eve-preview">
+          <span class="eve-preview__label">PREVIEW</span>
+          <div class="eve-preview__row">
+            <button class="eve-chip" data-state="idle">Idle</button>
+            <button class="eve-chip" data-state="listening">Listen</button>
+            <button class="eve-chip" data-state="thinking">Think</button>
+            <button class="eve-chip" data-state="speaking">Speak</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

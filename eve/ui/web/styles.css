@@ -1,0 +1,313 @@
+/* ============================================================
+   EVE — Voice Visualizer Window
+   Design tokens + glass-panel chrome. The orb itself is canvas.
+   Accent-derived colors (blobs / halo / accent hex) are set on
+   :root by app.js via setAccent(), so the whole shell retints
+   when the palette changes.
+   ============================================================ */
+
+:root {
+  /* Surfaces / text (dark glass theme) */
+  --color-panel: rgba(15, 17, 24, 0.46);
+  --color-panel-border: rgba(255, 255, 255, 0.10);
+  --color-hairline: rgba(255, 255, 255, 0.07);
+  --color-surface: rgba(255, 255, 255, 0.05);
+  --color-surface-active: rgba(255, 255, 255, 0.10);
+
+  --color-text: rgba(238, 241, 246, 0.92);
+  --color-text-muted: rgba(238, 241, 246, 0.42);
+  --color-text-faint: rgba(238, 241, 246, 0.35);
+  --color-on-accent: #0b0c10;
+
+  --color-listening: #3ad29b;
+  --color-thinking: #ffc44d;
+  --color-destructive: #ff6b6b;
+
+  /* Accent-derived (overwritten by app.js setAccent) */
+  --accent-hex: #ffb65e;
+  --accent-edge: #ff8c1a;
+  --accent-ring: #ffb347;
+  --blob-a: rgba(255, 140, 26, 0.16);
+  --blob-b: rgba(255, 179, 71, 0.10);
+  --halo: rgba(255, 140, 26, 0.10);
+
+  /* Geometry */
+  --radius-panel: 22px;
+  --radius-button: 13px;
+  --radius-segment: 12px;
+  --radius-segment-inner: 9px;
+  --radius-chip: 8px;
+
+  /* Motion */
+  --duration-fast: 0.16s;
+  --ease: ease;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+}
+
+/* ---- Outer ambience (the desktop behind the window) ---- */
+.eve-stage {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(120% 120% at 30% 10%, #15171f 0%, #0c0d12 55%, #07070b 100%);
+}
+
+.eve-blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+.eve-blob--a {
+  width: 420px; height: 420px;
+  left: max(-60px, 8vw); top: 6vh;
+  filter: blur(80px);
+  background: radial-gradient(circle, var(--blob-a) 0%, transparent 70%);
+  animation: eveDrift 17s ease-in-out infinite;
+}
+.eve-blob--b {
+  width: 360px; height: 360px;
+  right: max(-40px, 8vw); bottom: 6vh;
+  filter: blur(90px);
+  background: radial-gradient(circle, var(--blob-b) 0%, transparent 70%);
+  animation: eveDrift2 21s ease-in-out infinite;
+}
+
+.eve-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(80% 80% at 50% 50%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(80% 80% at 50% 50%, #000 30%, transparent 100%);
+}
+
+@keyframes eveDrift {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(20px, -26px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes eveDrift2 {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(-26px, 18px); }
+  100% { transform: translate(0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eve-blob { animation: none; }
+}
+
+/* ---- Glass panel ---- */
+.eve-panel {
+  position: relative;
+  width: 372px;
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  background: var(--color-panel);
+  border: 1px solid var(--color-panel-border);
+  box-shadow:
+    0 40px 90px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 1px 0 rgba(255, 255, 255, 0.10) inset,
+    0 0 60px var(--halo) inset;
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+}
+
+/* ---- Title bar ---- */
+.eve-titlebar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+.eve-traffic { display: flex; gap: 8px; }
+.eve-dot { width: 11px; height: 11px; border-radius: 50%; }
+.eve-dot--close { background: #ff5f57; }
+.eve-dot--min { background: #febc2e; }
+.eve-dot--max { background: #28c840; }
+.eve-title {
+  flex: 1;
+  text-align: center;
+  margin-left: -46px; /* optically center past the traffic lights */
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: rgba(238, 241, 246, 0.85);
+}
+
+/* ---- Canvas stage ---- */
+.eve-stage-canvas { position: relative; }
+#eve-canvas {
+  display: block;
+  width: 100%;
+  height: 300px;
+}
+.eve-status {
+  position: absolute;
+  left: 0; right: 0; bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+.eve-status__dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  box-shadow: 0 0 12px currentColor;
+  color: var(--color-text-muted);
+}
+.eve-status__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  color: rgba(238, 241, 246, 0.82);
+}
+
+/* ---- Controls ---- */
+.eve-controls { padding: 14px 16px 16px; }
+
+/* shared button transitions */
+.eve-seg, .eve-ptt, .eve-mute, .eve-demo, .eve-chip {
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease),
+              color var(--duration-fast) var(--ease),
+              transform 0.1s var(--ease),
+              box-shadow 0.2s var(--ease);
+}
+.eve-seg:active, .eve-ptt:active, .eve-mute:active,
+.eve-demo:active, .eve-chip:active { transform: scale(0.975); }
+
+/* Segmented mode control */
+.eve-segments {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  margin-bottom: 11px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface);
+  border-radius: var(--radius-segment);
+}
+.eve-seg {
+  flex: 1;
+  border: none;
+  padding: 8px 4px;
+  border-radius: var(--radius-segment-inner);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--color-text-muted);
+  background: transparent;
+}
+.eve-seg[aria-selected="true"] {
+  color: var(--color-text);
+  background: var(--color-surface-active);
+}
+
+/* Push-to-talk button */
+.eve-ptt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--radius-button);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-panel-border);
+}
+.eve-ptt__dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px var(--halo);
+}
+.eve-ptt.is-held {
+  color: var(--color-on-accent);
+  background: var(--accent-hex);
+  border-color: transparent;
+  box-shadow: 0 8px 26px color-mix(in srgb, var(--accent-edge) 50%, transparent);
+}
+.eve-ptt.is-held .eve-ptt__dot { box-shadow: 0 0 0 4px transparent; }
+
+/* Always-on controls */
+.eve-always { display: flex; gap: 8px; }
+.eve-mute, .eve-demo {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--radius-button);
+  font-size: 13px;
+  font-weight: 600;
+}
+.eve-mute {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-panel-border);
+}
+.eve-mute.is-muted {
+  color: var(--color-on-accent);
+  background: var(--color-destructive);
+  border-color: transparent;
+}
+.eve-demo {
+  color: var(--color-on-accent);
+  background: var(--accent-hex);
+  border: none;
+}
+
+/* Preview scrub row */
+.eve-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.eve-preview__label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--color-text-faint);
+}
+.eve-preview__row {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+  justify-content: flex-end;
+}
+.eve-chip {
+  border: none;
+  padding: 5px 9px;
+  border-radius: var(--radius-chip);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+}
+.eve-chip.is-active {
+  color: var(--color-text);
+  background: var(--color-surface-active);
+}
+
+[hidden] { display: none !important; }

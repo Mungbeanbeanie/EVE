@@ -45,6 +45,7 @@ class Agent:
         memory: MemoryManager,
         tools: ToolRegistry,
         executor: ToolExecutor,
+        viz=None,  # optional eve.ui.VizServer — drives the visualizer window
     ) -> None:
         self.config = config
         self.audio = audio
@@ -54,12 +55,25 @@ class Agent:
         self.memory = memory
         self.tools = tools
         self.executor = executor
+        # Optional on-screen orb. Anything with a ``set_state(name)`` method works;
+        # when absent every call is a no-op, so the headless loop is unchanged.
+        self.viz = viz
         # Gate destructive tools (e.g. creating a calendar event) behind a yes/no
         # prompt over the active channel. The executor calls this back before running
         # any tool flagged destructive=True; returning False cancels the call.
         self.executor.confirmer = self._confirm_destructive
         self._running = False
         self._speak = False  # tracks the active channel (voice vs text) for prompts
+
+    # ── Visualizer ────────────────────────────────────────────────────────────
+    def set_viz(self, viz) -> None:
+        """Attach (or replace) the visualizer window driven by agent state."""
+        self.viz = viz
+
+    def _set_state(self, name: str) -> None:
+        """Drive the orb to a pipeline state; a no-op when no window is attached."""
+        if self.viz is not None:
+            self.viz.set_state(name)
 
     # ── Construction ─────────────────────────────────────────────────────────
     @classmethod
@@ -115,6 +129,7 @@ class Agent:
         elif mode == "wake":
             print(f"EVE voice mode — say '{self.config.wake_word}' to talk. Ctrl+C to quit.")
         while self._running:
+            self._set_state("listening")  # orb reflects that EVE is capturing audio
             if mode == "ptt":
                 audio = await self.audio.record_push_to_talk()
             elif mode == "wake":
@@ -124,6 +139,7 @@ class Agent:
                 audio = await self.audio.record_utterance()  # VAD-segmented buffer
             text = (await self.stt.transcribe(audio)).strip()
             if not text:
+                self._set_state("idle")
                 continue  # silence / background noise → keep listening
             print(f"you > {text}")
             await self._handle_turn(text, speak=True)
@@ -161,6 +177,7 @@ class Agent:
 
             # The LLM client runs the tool-use loop internally, calling back into
             # self.executor when the model requests a tool.
+            self._set_state("thinking")  # orb pulses while the model works
             reply = await self.llm.respond(
                 messages=context,
                 tools=self.tools.specs(),
@@ -169,6 +186,7 @@ class Agent:
 
             await self.memory.remember(user=text, assistant=reply)
 
+            self._set_state("speaking")  # orb swells while EVE replies
             if speak:
                 await self.tts.speak(reply)
             else:
@@ -186,6 +204,10 @@ class Agent:
                 await self.tts.speak(message)
             else:
                 print(f"eve > {message}  ({type(exc).__name__}: {exc})")
+        finally:
+            # Turn over → orb rests. The voice loop flips back to "listening" on
+            # its next iteration; text mode simply waits at idle for the next line.
+            self._set_state("idle")
 
     # ── Destructive-action confirmation ───────────────────────────────────────
     # Word-level matches (not substrings) so "now"/"know" don't read as "no".

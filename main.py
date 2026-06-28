@@ -6,8 +6,9 @@ runs it in either VOICE mode (mic -> STT -> LLM -> TTS -> speaker) or TEXT mode
 LLM + memory + tools loop before touching the audio/GPU stack.
 
 Run:
-    python main.py --mode text     # no audio hardware needed
-    python main.py --mode voice    # needs mic/speaker, ffmpeg, Whisper
+    python main.py --mode text              # no audio hardware needed
+    python main.py --mode voice             # needs mic/speaker, ffmpeg, Whisper
+    python main.py --mode voice --window    # + the on-screen visualizer orb
 """
 
 from __future__ import annotations
@@ -28,6 +29,17 @@ def parse_args() -> argparse.Namespace:
         default="text",
         help="voice = mic/speaker pipeline; text = terminal REPL (default)",
     )
+    parser.add_argument(
+        "--window",
+        action="store_true",
+        help="open the EVE visualizer window; the orb mirrors the live pipeline",
+    )
+    parser.add_argument(
+        "--window-port",
+        type=int,
+        default=8765,
+        help="port for the visualizer window server (default: 8765)",
+    )
     return parser.parse_args()
 
 
@@ -39,7 +51,21 @@ async def main() -> None:
     # Agent.from_config wires the pipeline, memory layers, tools, and LLM client
     # together using only the abstract interfaces — see eve/agent.py.
     agent = Agent.from_config(config)
-    await agent.start(mode=args.mode)
+
+    # Optional visualizer window: a local server hosts the glass-panel orb and
+    # the agent pushes its live state (listening/thinking/speaking) to it.
+    viz = None
+    if args.window:
+        from eve.ui import VizServer
+
+        viz = VizServer(port=args.window_port).start(open_browser=True)
+        agent.set_viz(viz)
+
+    try:
+        await agent.start(mode=args.mode)
+    finally:
+        if viz is not None:
+            viz.stop()
 
 
 if __name__ == "__main__":

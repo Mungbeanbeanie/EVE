@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  .eve-btn { transition: background .16s ease, color .16s ease, transform .1s ease, box-shadow .2s ease; }
+  .eve-btn:active { transform: scale(0.975); }
+  @keyframes eveDrift { 0%{transform:translate(0,0)} 50%{transform:translate(20px,-26px)} 100%{transform:translate(0,0)} }
+  @keyframes eveDrift2 { 0%{transform:translate(0,0)} 50%{transform:translate(-26px,18px)} 100%{transform:translate(0,0)} }
+</style>
+</helmet>
+<div style="position:relative; width:860px; height:600px; overflow:hidden; background:radial-gradient(120% 120% at 30% 10%, #15171f 0%, #0c0d12 55%, #07070b 100%); font-family:'Space Grotesk', -apple-system, system-ui, sans-serif;">
+
+  <div style="position:absolute; width:420px; height:420px; left:-60px; top:-80px; border-radius:50%; filter:blur(80px); background:radial-gradient(circle, {{ blobA }} 0%, transparent 70%); animation:eveDrift 17s ease-in-out infinite;"></div>
+  <div style="position:absolute; width:360px; height:360px; right:-40px; bottom:-80px; border-radius:50%; filter:blur(90px); background:radial-gradient(circle, {{ blobB }} 0%, transparent 70%); animation:eveDrift2 21s ease-in-out infinite;"></div>
+  <div style="position:absolute; inset:0; background-image:linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px); background-size:46px 46px; mask-image:radial-gradient(80% 80% at 50% 50%, #000 30%, transparent 100%); -webkit-mask-image:radial-gradient(80% 80% at 50% 50%, #000 30%, transparent 100%);"></div>
+
+  <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:372px; border-radius:22px; overflow:hidden; background:rgba(15,17,24,0.46); border:1px solid rgba(255,255,255,0.10); box-shadow:0 40px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.02) inset, 0 1px 0 rgba(255,255,255,0.10) inset, 0 0 60px {{ haloGlow }} inset; backdrop-filter:blur(26px) saturate(150%); -webkit-backdrop-filter:blur(26px) saturate(150%);">
+
+    <div style="display:flex; align-items:center; height:40px; padding:0 16px; border-bottom:1px solid rgba(255,255,255,0.07);">
+      <div style="display:flex; gap:8px;">
+        <span style="width:11px; height:11px; border-radius:50%; background:#ff5f57;"></span>
+        <span style="width:11px; height:11px; border-radius:50%; background:#febc2e;"></span>
+        <span style="width:11px; height:11px; border-radius:50%; background:#28c840;"></span>
+      </div>
+      <div style="flex:1; text-align:center; margin-left:-46px; font-size:12px; font-weight:600; letter-spacing:3px; color:rgba(238,241,246,0.85);">EVE</div>
+    </div>
+
+    <div style="position:relative;">
+      <canvas ref="{{ canvasRef }}" style="width:100%; height:300px; display:block;"></canvas>
+      <div style="position:absolute; left:0; right:0; bottom:14px; display:flex; align-items:center; justify-content:center; gap:9px;">
+        <span style="width:7px; height:7px; border-radius:50%; background:{{ statusDot }}; box-shadow:0 0 12px {{ statusDot }};"></span>
+        <span style="font-size:11px; font-weight:600; letter-spacing:2.5px; color:rgba(238,241,246,0.82);">{{ statusText }}</span>
+      </div>
+    </div>
+
+    <div style="padding:14px 16px 16px;">
+      <div style="display:flex; padding:3px; gap:3px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.05); border-radius:12px; margin-bottom:11px;">
+        <button class="eve-btn" onClick="{{ setPtt }}" style="flex:1; border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;">
+          <span style="display:block; padding:8px 4px; border-radius:9px; font-size:12px; font-weight:600; letter-spacing:0.3px; color:{{ segPttText }}; background:{{ segPttBg }};">Push&#8209;to&#8209;talk</span>
+        </button>
+        <button class="eve-btn" onClick="{{ setAlways }}" style="flex:1; border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;">
+          <span style="display:block; padding:8px 4px; border-radius:9px; font-size:12px; font-weight:600; letter-spacing:0.3px; color:{{ segAlwaysText }}; background:{{ segAlwaysBg }};">Always on</span>
+        </button>
+      </div>
+
+      <sc-if value="{{ isPtt }}" hint-placeholder-val="{{ true }}">
+        <button class="eve-btn" onMouseDown="{{ press }}" onMouseUp="{{ release }}" onMouseLeave="{{ release }}" style="width:100%; border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;">
+          <span style="display:flex; align-items:center; justify-content:center; gap:10px; padding:13px; border-radius:13px; font-size:13.5px; font-weight:600; letter-spacing:0.4px; color:{{ talkText }}; background:{{ talkBg }}; border:1px solid {{ talkBorder }}; box-shadow:{{ talkShadow }};">
+            <span style="width:8px; height:8px; border-radius:50%; background:currentColor; box-shadow:0 0 0 4px {{ talkRing }};"></span>{{ talkLabel }}
+          </span>
+        </button>
+      </sc-if>
+
+      <sc-if value="{{ isAlways }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; gap:8px;">
+          <button class="eve-btn" onClick="{{ toggleMute }}" style="flex:1; border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;">
+            <span style="display:block; padding:12px; border-radius:13px; font-size:13px; font-weight:600; color:{{ muteText }}; background:{{ muteBg }}; border:1px solid {{ muteBorder }};">{{ muteLabel }}</span>
+          </button>
+          <button class="eve-btn" onClick="{{ demoReply }}" style="flex:1; border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;">
+            <span style="display:block; padding:12px; border-radius:13px; font-size:13px; font-weight:600; color:#0b0c10; background:{{ accentHex }};">Demo reply</span>
+          </button>
+        </div>
+      </sc-if>
+
+      <div style="display:flex; align-items:center; gap:8px; margin-top:13px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06);">
+        <span style="font-size:9.5px; font-weight:600; letter-spacing:1.2px; color:rgba(238,241,246,0.35);">PREVIEW</span>
+        <div style="display:flex; gap:5px; flex:1; justify-content:flex-end;">
+          <button class="eve-btn" onClick="{{ pIdle }}" style="border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;"><span style="display:block; padding:5px 9px; border-radius:8px; font-size:11px; font-weight:600; color:{{ idleText }}; background:{{ idleBg }};">Idle</span></button>
+          <button class="eve-btn" onClick="{{ pListen }}" style="border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;"><span style="display:block; padding:5px 9px; border-radius:8px; font-size:11px; font-weight:600; color:{{ listenText }}; background:{{ listenBg }};">Listen</span></button>
+          <button class="eve-btn" onClick="{{ pThink }}" style="border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;"><span style="display:block; padding:5px 9px; border-radius:8px; font-size:11px; font-weight:600; color:{{ thinkText }}; background:{{ thinkBg }};">Think</span></button>
+          <button class="eve-btn" onClick="{{ pSpeak }}" style="border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit;"><span style="display:block; padding:5px 9px; border-radius:8px; font-size:11px; font-weight:600; color:{{ speakText }}; background:{{ speakBg }};">Speak</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;amber&quot;,&quot;cyan&quot;,&quot;violet&quot;,&quot;mono&quot;],&quot;default&quot;:&quot;amber&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Visualizer&quot;},&quot;particleCount&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:150,&quot;min&quot;:80,&quot;max&quot;:240,&quot;step&quot;:10,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Visualizer&quot;}}">
+class Component extends DCLogic {
+  canvasRef = React.createRef();
+  state = { mode: 'ptt', anim: 'idle', muted: false };
+
+  PALS = {
+    amber:  { edge:'#ff8c1a', node:'#ffcf7a', core:'#ffe7b8', ring:'#ffb347', hex:'#ffb65e' },
+    cyan:   { edge:'#1fb0e0', node:'#8fe9ff', core:'#d8fbff', ring:'#52d4f0', hex:'#6fdcf5' },
+    violet: { edge:'#8a6cff', node:'#c4b3ff', core:'#ece4ff', ring:'#a98cff', hex:'#b49cff' },
+    mono:   { edge:'#9fb0c8', node:'#e3ebf5', core:'#ffffff', ring:'#b8c6da', hex:'#cdd8e6' },
+  };
+  DEFAULTS = {
+    defaultAccent:'amber',
+    palettes:null, // falls back to PALS
+    particleCount:150, neighbors:3,
+    depthOfField:{ enabled:true, nearPlane:0.82, maxBlur:7, farDim:0.45 },
+    rotation:{ yaw:0.16, pitchBase:0.34, pitchWobble:0.14 },
+    states:{ idle:{pulses:12,brightness:0.5}, listening:{pulses:20,brightness:0.8}, thinking:{pulses:16,brightness:0.7}, speaking:{pulses:30,brightness:1.0} },
+    timings:{ thinkingDelayMs:650, replyDurationMs:3200 },
+  };
+  pal(){ const pals=(this.C&&this.C.palettes)||this.PALS; const key=this.props.accent||(this.C&&this.C.defaultAccent)||'amber'; return pals[key]||pals.amber||this.PALS.amber; }
+
+  componentDidMount() {
+    this.C = Object.assign({}, this.DEFAULTS);
+    const c = this.canvasRef.current;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const r = c.getBoundingClientRect();
+    this._w = r.width || 372; this._h = r.height || 300;
+    c.width = this._w * dpr; c.height = this._h * dpr;
+    this._ctx = c.getContext('2d'); this._ctx.scale(dpr, dpr);
+    this.build(+(this.props.particleCount || this.C.particleCount));
+    this._t0 = performance.now();
+    this._loop = this._loop.bind(this);
+    this._raf = requestAnimationFrame(this._loop);
+    this.loadConfig();
+  }
+  componentDidUpdate(prev){ if (prev.particleCount !== this.props.particleCount) this.build(+(this.props.particleCount||150)); }
+  componentWillUnmount(){ cancelAnimationFrame(this._raf); this._clear(); }
+  _clear(){ clearTimeout(this._a); clearTimeout(this._b); }
+
+  async loadConfig(){
+    try {
+      const res = await fetch('eve.config.json', { cache:'no-store' });
+      if (!res.ok) return;
+      let txt = await res.text();
+      // strip // line comments and /* */ block comments, then parse
+      txt = txt.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+      const cfg = JSON.parse(txt);
+      this.C = Object.assign({}, this.DEFAULTS, cfg);
+      if (this._w) this.build(+(this.props.particleCount || this.C.particleCount));
+      this.forceUpdate();
+    } catch (err) { /* keep defaults */ }
+  }
+
+  build(N){
+    N = Math.max(60, Math.min(260, N|0));
+    const nodes = [];
+    const gold = Math.PI * (3 - Math.sqrt(5));
+    for (let i=0;i<N;i++){
+      const y = 1 - 2*(i+0.5)/N, rr = Math.sqrt(Math.max(0,1-y*y)), th = gold*i;
+      nodes.push({ x:Math.cos(th)*rr, y, z:Math.sin(th)*rr, r:0.4+Math.random()*0.9, ph:Math.random()*6.28 });
+    }
+    // neural edges: N nearest neighbours
+    const NB = (this.C && this.C.neighbors) || 3;
+    const seen = new Set(), edges = [];
+    for (let i=0;i<N;i++){
+      const d = [];
+      for (let j=0;j<N;j++) if (j!==i){ const a=nodes[i],b=nodes[j]; const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z; d.push([dx*dx+dy*dy+dz*dz,j]); }
+      d.sort((p,q)=>p[0]-q[0]);
+      for (let k=0;k<NB;k++){ const j=d[k][1], key=Math.min(i,j)+'-'+Math.max(i,j); if(!seen.has(key)){ seen.add(key); edges.push([i,j]); } }
+    }
+    // great-circle rings
+    const rings = [];
+    [[0.5,0.2,1.0],[1.1,0.9,0.98],[2.0,0.4,1.02]].forEach(([tx,tz,rad])=>{
+      const pts=[]; for(let k=0;k<60;k++){ const an=2*Math.PI*k/60; let x=Math.cos(an)*rad,y=Math.sin(an)*rad,z=0;
+        let y1=y*Math.cos(tx)-z*Math.sin(tx), z1=y*Math.sin(tx)+z*Math.cos(tx);
+        let x2=x*Math.cos(tz)-y1*Math.sin(tz), y2=x*Math.sin(tz)+y1*Math.cos(tz);
+        pts.push({x:x2,y:y2,z:z1}); }
+      rings.push(pts);
+    });
+    this.nodes = nodes; this.edges = edges; this.rings = rings;
+    this.pulses = []; for(let i=0;i<18;i++) this.spawn();
+  }
+  spawn(){ const e=this.edges; if(!e||!e.length) return; this.pulses.push({ ei:(Math.random()*e.length)|0, p:Math.random(), sp:0.4+Math.random()*0.5 }); }
+
+  rot(n, yaw, pitch){
+    let x=n.x*Math.cos(yaw)-n.z*Math.sin(yaw), z1=n.x*Math.sin(yaw)+n.z*Math.cos(yaw);
+    let y=n.y*Math.cos(pitch)-z1*Math.sin(pitch), z=n.y*Math.sin(pitch)+z1*Math.cos(pitch);
+    return {x,y,z};
+  }
+  env(t, anim){
+    if (anim==='speaking'){ const f=0.5+0.5*Math.sin(t*9.1), s=0.6+0.4*Math.sin(t*2.7+1), w=0.45+0.55*Math.max(0,Math.sin(t*1.35+0.3)); return Math.min(1,f*s*w*1.35); }
+    if (anim==='listening') return 0.32+0.12*Math.sin(t*4)+0.06*Math.sin(t*7.1);
+    if (anim==='thinking') return 0.2+0.06*Math.sin(t*3.2);
+    return 0.12+0.05*Math.sin(t*1.4);
+  }
+
+  _loop(now){
+    const ctx=this._ctx;
+    if (ctx && this.nodes){
+      const t=(now-this._t0)/1000, w=this._w, h=this._h, cx=w/2, cy=h/2-6;
+      const anim=this.state.anim, e=this.env(t,anim), P=this.pal();
+      const R=Math.min(w,h)*0.345*(1+e*0.05), fov=2.7;
+      const rotC=this.C.rotation;
+      const yaw=t*rotC.yaw, pitch=rotC.pitchBase+Math.sin(t*0.12)*rotC.pitchWobble;
+      ctx.clearRect(0,0,w,h);
+      ctx.globalCompositeOperation='lighter';
+
+      // project nodes
+      const pr=this.nodes.map(n=>{ const u=this.rot(n,yaw,pitch); const breath=1+e*0.06*Math.sin(t*3+n.ph);
+        const sc=fov/(fov-u.z); const d=(u.z+1)/2; return { sx:cx+u.x*R*sc*breath, sy:cy+u.y*R*sc*breath, d, sc, n }; });
+
+      // rings
+      this.rings.forEach((pts,ri)=>{ ctx.beginPath();
+        pts.forEach((p,k)=>{ const u=this.rot(p,yaw+ri*0.3,pitch); const sc=fov/(fov-u.z); const X=cx+u.x*R*sc, Y=cy+u.y*R*sc; k?ctx.lineTo(X,Y):ctx.moveTo(X,Y); });
+        ctx.closePath(); ctx.strokeStyle=this.rgba(P.ring,0.10+e*0.12); ctx.lineWidth=1; ctx.stroke(); });
+
+      // edges
+      for (let k=0;k<this.edges.length;k++){ const a=pr[this.edges[k][0]], b=pr[this.edges[k][1]];
+        const da=(a.d+b.d)/2; const al=da*da*(0.16+e*0.4);
+        if (al<0.012) continue;
+        ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy);
+        ctx.strokeStyle=this.rgba(P.edge,al); ctx.lineWidth=0.55*da+0.2; ctx.stroke(); }
+
+      // nodes — sorted back-to-front, with depth-of-field bokeh on far ones
+      const dof=this.C.depthOfField;
+      const order=pr.map((p,i)=>i).sort((i,j)=>pr[i].d-pr[j].d);
+      for (let oi=0; oi<order.length; oi++){ const p=pr[order[oi]]; const sz=(0.5+p.d*1.9)*(1+e*0.35);
+        // depth 0=far,1=near. Blur & dim the far particles.
+        const blur = dof.enabled ? Math.max(0,(dof.nearPlane-p.d))/dof.nearPlane * dof.maxBlur : 0;
+        const dim = dof.enabled ? 1 - (1-Math.min(1,p.d/dof.nearPlane))*dof.farDim : 1;
+        if (blur>0.4){ ctx.shadowColor=this.rgba(P.node, (0.5+p.d*0.5)*dim); ctx.shadowBlur=blur; }
+        const rad = blur>0.4 ? sz*(1+blur*0.16) : sz; // far blobs read a touch larger
+        ctx.beginPath(); ctx.arc(p.sx,p.sy,rad,0,6.2832); ctx.fillStyle=this.rgba(P.node,(0.25+p.d*0.75)*dim); ctx.fill();
+        ctx.shadowBlur=0;
+        if (p.d>0.82){ ctx.beginPath(); ctx.arc(p.sx,p.sy,sz*2.4,0,6.2832); ctx.fillStyle=this.rgba(P.node,0.12+e*0.1); ctx.fill(); } }
+
+      // signal pulses
+      const stC=this.C.states[anim]||this.C.states.idle;
+      const want = stC.pulses;
+      while (this.pulses.length<want) this.spawn();
+      const bright = stC.brightness;
+      const spd = 0.5 + e*1.4;
+      for (let i=this.pulses.length-1;i>=0;i--){ const pu=this.pulses[i]; pu.p += pu.sp*spd*0.016;
+        if (pu.p>=1){ this.pulses.splice(i,1); continue; }
+        const a=pr[this.edges[pu.ei][0]], b=pr[this.edges[pu.ei][1]];
+        const x=a.sx+(b.sx-a.sx)*pu.p, y=a.sy+(b.sy-a.sy)*pu.p;
+        const fade=Math.sin(pu.p*Math.PI), d=(a.d+b.d)/2;
+        ctx.beginPath(); ctx.arc(x,y,1.6+fade*1.4,0,6.2832); ctx.fillStyle=this.rgba(P.core,(0.5+0.5*d)*fade*bright); ctx.fill();
+        ctx.beginPath(); ctx.arc(x,y,4.5*fade,0,6.2832); ctx.fillStyle=this.rgba(P.edge,0.25*fade*bright); ctx.fill(); }
+
+      // core
+      const cr=R*(0.34+e*0.4);
+      const cg=ctx.createRadialGradient(cx,cy,1,cx,cy,cr);
+      cg.addColorStop(0,this.rgba(P.core,0.6+e*0.3)); cg.addColorStop(0.4,this.rgba(P.edge,0.28)); cg.addColorStop(1,this.rgba(P.edge,0));
+      ctx.beginPath(); ctx.arc(cx,cy,cr,0,6.2832); ctx.fillStyle=cg; ctx.fill();
+
+      // HUD arcs
+      ctx.lineWidth=1.2;
+      [[1.16,0.6,1],[1.28,-0.35,1]].forEach((ar,i)=>{ const a0=t*ar[1]; for(let s=0;s<3;s++){ const st=a0+s*2.094; ctx.beginPath(); ctx.arc(cx,cy,R*ar[0],st,st+1.2); ctx.strokeStyle=this.rgba(P.ring,0.14+e*0.1); ctx.stroke(); } });
+
+      ctx.globalCompositeOperation='source-over';
+    }
+    this._raf=requestAnimationFrame(this._loop);
+  }
+  rgba(hex,a){ const h=hex.replace('#',''); return `rgba(${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)},${a})`; }
+
+  setPtt = () => { this._clear(); this.setState({ mode:'ptt', muted:false, anim:'idle' }); };
+  setAlways = () => { this._clear(); this.setState({ mode:'always', muted:false, anim:'listening' }); };
+  press = () => { this._clear(); this.setState({ anim:'listening' }); };
+  release = () => { if (this.state.anim!=='listening') return; this._clear(); this.setState({ anim:'thinking' });
+    const T=this.C.timings; this._a=setTimeout(()=>this.setState({anim:'speaking'}),T.thinkingDelayMs); this._b=setTimeout(()=>this.setState({anim:'idle'}),T.thinkingDelayMs+T.replyDurationMs); };
+  demoReply = () => { this._clear(); this.setState({ anim:'thinking', muted:false });
+    const T=this.C.timings; this._a=setTimeout(()=>this.setState({anim:'speaking'}),T.thinkingDelayMs-50); this._b=setTimeout(()=>this.setState({anim:'listening'}),T.thinkingDelayMs-50+T.replyDurationMs); };
+  toggleMute = () => { this._clear(); const m=!this.state.muted; this.setState({ muted:m, anim:m?'idle':'listening' }); };
+  setAnim = (a) => { this._clear(); this.setState({ anim:a }); };
+
+  renderVals(){
+    const { mode, anim, muted } = this.state;
+    const P = this.pal(), acc = P.hex, isPtt = mode==='ptt';
+    const T = 'rgba(238,241,246,0.92)', SUB = 'rgba(238,241,246,0.42)', SURF2='rgba(255,255,255,0.10)';
+    const statusMap = { idle: muted?'MUTED':'READY', listening:'LISTENING', thinking:'THINKING', speaking:'SPEAKING' };
+    const dotMap = { idle: muted?'#ff6b6b':SUB, listening:'#3ad29b', thinking:'#ffc44d', speaking:acc };
+    const on=b=>b?SURF2:'transparent', onT=b=>b?T:SUB;
+    const pressing = anim==='listening' && isPtt;
+    return {
+      canvasRef:this.canvasRef, accentHex:acc,
+      blobA:this.rgba(P.edge,0.16), blobB:this.rgba(P.ring,0.10), haloGlow:this.rgba(P.edge,0.10),
+      statusText:statusMap[anim], statusDot:dotMap[anim],
+      isPtt, isAlways:!isPtt, setPtt:this.setPtt, setAlways:this.setAlways,
+      segPttText:onT(isPtt), segPttBg:on(isPtt), segAlwaysText:onT(!isPtt), segAlwaysBg:on(!isPtt),
+      talkText: pressing?'#0b0c10':T, talkBg: pressing?acc:'rgba(255,255,255,0.05)', talkBorder: pressing?'transparent':'rgba(255,255,255,0.10)',
+      talkShadow: pressing?`0 8px 26px ${this.rgba(P.edge,0.5)}`:'none', talkRing:this.rgba(P.edge, pressing?0:0.16),
+      talkLabel: pressing?'Listening… release to send':'Hold to talk', press:this.press, release:this.release,
+      muteText: muted?'#0b0c10':T, muteBg: muted?'#ff6b6b':'rgba(255,255,255,0.05)', muteBorder: muted?'transparent':'rgba(255,255,255,0.10)',
+      muteLabel: muted?'Unmute':'Mute mic', toggleMute:this.toggleMute, demoReply:this.demoReply,
+      idleText:onT(anim==='idle'), idleBg:on(anim==='idle'), listenText:onT(anim==='listening'), listenBg:on(anim==='listening'),
+      thinkText:onT(anim==='thinking'), thinkBg:on(anim==='thinking'), speakText:onT(anim==='speaking'), speakBg:on(anim==='speaking'),
+      pIdle:()=>this.setAnim('idle'), pListen:()=>this.setAnim('listening'), pThink:()=>this.setAnim('thinking'), pSpeak:()=>this.setAnim('speaking'),
+    };
+  }
+}
+</script>
+</body>
+</html>

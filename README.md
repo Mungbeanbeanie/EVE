@@ -44,8 +44,9 @@ eve/
   llm/                 base · litellm_client · providers · factory · sanitize
   memory/              manager · working · procedural · episodic · mem0_backend · schema.sql
   tools/               base · registry · executor · adapters/{google,websearch}
+  ui/                  visualizer window: server (HTTP+SSE) · web/{eve-orb.js,…}
   utils/logging.py
-main.py                entrypoint: --mode {voice,text}
+main.py                entrypoint: --mode {voice,text} [--window]
 tests/                 smoke tests (skeleton wiring only)
 ```
 
@@ -237,6 +238,45 @@ TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxx
 ```
 
 That's all — `web_search` is read-only, so there's no OAuth and no confirmation gate.
+
+### Visualizer window (optional)
+
+EVE ships with a **glass-panel voice visualizer**: a rotating neural-network orb
+(amber particle sphere, signal pulses, glowing core, orbital rings + HUD arcs)
+that reacts to EVE's conversational state. It's a zero-dependency web frontend
+(HTML5 Canvas) served by a small stdlib HTTP server — no Electron, no npm, no
+extra pip installs.
+
+```bash
+make window          # preview the window standalone (synthetic animation)
+make window-voice    # voice mode with the live orb attached
+# or directly:
+python -m eve.ui                    # standalone preview
+python main.py --mode voice --window
+```
+
+When the agent runs with `--window`, it pushes its pipeline state to the browser
+over **Server-Sent Events**, so the orb mirrors the real loop:
+`listening → thinking → speaking → idle`. In the browser, the orb's *loudness*
+(radius/brightness pulsing) is driven by the **real microphone** via the Web
+Audio API; the *state* comes from the Python agent. Without a backend the window
+is fully self-contained — every control animates the orb locally.
+
+The renderer (`eve/ui/web/eve-orb.js`) and its tuning file
+(`eve/ui/web/eve.config.json`) come straight from the design handoff; retune
+`particleCount`, palettes, depth-of-field, rotation, and per-state energy there.
+
+```
+eve/ui/
+  server.py            stdlib HTTP + SSE bridge (VizServer); drives the orb from agent state
+  __main__.py          `python -m eve.ui` — standalone window preview
+  web/
+    index.html         glass panel: title bar · canvas · controls
+    styles.css         design tokens + window chrome
+    app.js             orb wiring · mic energy · controls · SSE client
+    eve-orb.js         the neural-orb renderer (from the handoff)
+    eve.config.json    palettes / particle count / motion / per-state energy
+```
 
 ---
 

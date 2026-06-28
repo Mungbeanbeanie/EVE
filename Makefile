@@ -21,8 +21,8 @@ VOICE_PKGS := faster-whisper webrtcvad pyttsx3 pyaudio
 
 .DEFAULT_GOAL := help
 .PHONY: help setup venv install install-voice env db db-down db-logs ollama \
-        run text voice test lint fmt docker-build package up down logs \
-        dist clean clean-all
+        run text voice window window-voice test lint fmt docker-build package \
+        up down logs dist clean clean-all
 
 # ── Help ─────────────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -69,6 +69,13 @@ text: ## Run EVE in text mode (no audio hardware needed)
 
 voice: ## Run EVE in voice mode (requires 'make install-voice')
 	@$(PY) main.py --mode voice
+
+# ── Visualizer window ─────────────────────────────────────────────────────────
+window: ## Preview the EVE visualizer window standalone (no agent, opens browser)
+	@$(PY) -m eve.ui
+
+window-voice: ## Run voice mode with the visualizer window attached
+	@$(PY) main.py --mode voice --window
 
 # ── Quality ──────────────────────────────────────────────────────────────────
 test: ## Run the test suite
