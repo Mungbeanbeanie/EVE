@@ -1,0 +1,26 @@
+# Training-only dependencies for the custom "Hey EVE" wake word.
+# Kept OUT of the project's top-level requirements.txt: you only need these to
+# TRAIN a model, never to RUN EVE (runtime just loads the resulting .onnx).
+#
+# Install into a dedicated venv:  pip install -r requirements-train.txt
+# A CUDA GPU is strongly recommended; CPU training works but is slow.
+
+# openWakeWord itself (training extras) + its synthetic-speech / augmentation stack.
+openwakeword>=0.6
+piper-phonemize
+mutagen==1.47.0
+torchinfo==1.8.0
+torchmetrics==1.2.0
+speechbrain==0.5.14
+audiomentations==0.33.0
+torch-audiomentations==0.11.0
+acoustics==0.2.6
+pronouncing==0.2.0
+datasets==2.14.6
+deep-phonemizer==0.0.19
+
+# Audio I/O + resampling for the dataset prep in download_data.py.
+soundfile>=0.12
+librosa>=0.10
+scipy>=1.11
+numpy>=1.26

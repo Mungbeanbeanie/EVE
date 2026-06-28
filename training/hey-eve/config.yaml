@@ -1,0 +1,66 @@
+# openWakeWord training config for a custom "Hey EVE" wake word.
+#
+# Passed to openWakeWord's train.py (see train.sh). Schema mirrors the project's
+# example config; only the phrase, name, and local paths are customised. All paths
+# are relative to this directory (training/hey-eve/), i.e. run train.sh from here.
+#
+# Docs: https://github.com/dscripka/openWakeWord/blob/main/docs/training_models.md
+
+# ── What we're training ──────────────────────────────────────────────────────
+model_name: "hey_eve"
+target_phrase:
+  - "hey eve"
+# Adversarial negatives: similar-sounding phrases the model must NOT fire on.
+# Reduces false wakes on near-homophones. Add/remove to taste.
+custom_negative_phrases:
+  - "hey eva"
+  - "hey steve"
+  - "hey eve's"
+  - "heave"
+  - "eve"
+
+# ── Synthetic sample counts (more = better, slower) ──────────────────────────
+# 10k is the documented minimum; 20k+ gives a noticeably sturdier model. Each
+# sample is TTS-generated, so this is the main time driver of clip generation.
+n_samples: 20000
+n_samples_val: 2000
+tts_batch_size: 50
+augmentation_batch_size: 16
+
+# ── Synthetic speech generator (cloned by setup.sh) ──────────────────────────
+piper_sample_generator_path: "./piper-sample-generator"
+
+# ── Where the trained model + intermediates land ─────────────────────────────
+output_dir: "./hey_eve_model"
+
+# ── Augmentation data (fetched by setup.sh + download_data.py) ───────────────
+# Room impulse responses make positives robust to real-room acoustics.
+rir_paths:
+  - "./data/mit_rirs"
+# Background/noise audio mixed under the positives (and used as negatives).
+background_paths:
+  - "./data/audioset"
+  - "./data/fma"
+background_paths_duplication_rate:
+  - 1
+  - 1
+augmentation_rounds: 1
+
+# ── Negative feature banks (precomputed, downloaded by setup.sh) ─────────────
+false_positive_validation_data_path: "./data/validation_set_features.npy"
+feature_data_files:
+  "ACAV100M_sample": "./data/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
+
+# ── Per-batch class mix during training ──────────────────────────────────────
+batch_n_per_class:
+  "ACAV100M_sample": 1024
+  "adversarial_negative": 50
+  "positive": 50
+
+# ── Model + training schedule ────────────────────────────────────────────────
+model_type: "dnn"
+layer_size: 32
+steps: 50000
+max_negative_weight: 1500
+# train.py tunes the detection threshold to hit this false-accept budget.
+target_false_positives_per_hour: 0.2

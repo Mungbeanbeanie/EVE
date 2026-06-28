@@ -1,0 +1,11 @@
+# Large / reproducible training artifacts — never commit these.
+data/
+piper-sample-generator/
+hey_eve_model/
+.venv-train/
+*.npy
+*.tar
+*.pt
+
+# Keep the trained model only if you choose to (it's small); un-ignore if so:
+!hey_eve_model/hey_eve.onnx
