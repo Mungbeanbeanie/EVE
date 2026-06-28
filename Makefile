@@ -20,9 +20,13 @@ VERSION := $(shell sed -n 's/^__version__ = "\(.*\)"/\1/p' eve/__init__.py)
 VOICE_PKGS := faster-whisper webrtcvad pyttsx3 pyaudio
 
 .DEFAULT_GOAL := help
-.PHONY: help setup venv install install-voice env db db-down db-logs ollama \
-        run text voice window window-voice test lint fmt docker-build package \
-        up down logs dist clean clean-all
+.PHONY: help setup venv install install-voice install-window env db db-down \
+        db-logs ollama run text voice window window-voice test lint fmt \
+        docker-build package up down logs dist install-agent uninstall-agent \
+        clean clean-all
+
+# Native desktop window deps (macOS): menu-bar host + WKWebView bindings.
+WINDOW_PKGS := rumps pyobjc-framework-Cocoa pyobjc-framework-WebKit pywebview
 
 # ── Help ─────────────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -44,6 +48,9 @@ install: venv ## Install core dependencies into the venv
 
 install-voice: venv ## Install the optional voice stack (mic/STT/TTS)
 	@$(PIP) install $(VOICE_PKGS)
+
+install-window: venv ## Install the native menu-bar window deps (macOS)
+	@$(PIP) install $(WINDOW_PKGS)
 
 env: ## Create .env from .env.example if it doesn't exist
 	@test -f .env || (cp .env.example .env && echo "📝 Created .env — fill in LLM_MODEL + key.")
@@ -74,8 +81,15 @@ voice: ## Run EVE in voice mode (requires 'make install-voice')
 window: ## Preview the EVE visualizer window standalone (no agent, opens browser)
 	@$(PY) -m eve.ui
 
-window-voice: ## Run voice mode with the visualizer window attached
+window-voice: ## Run voice mode with the native menu-bar window attached
 	@$(PY) main.py --mode voice --window
+
+# ── Always-on (launchd LaunchAgent) ──────────────────────────────────────────
+install-agent: ## Install EVE as a login agent (always-on, auto-restart)
+	@deploy/install-agent.sh
+
+uninstall-agent: ## Remove the EVE login agent
+	@deploy/install-agent.sh --uninstall
 
 # ── Quality ──────────────────────────────────────────────────────────────────
 test: ## Run the test suite

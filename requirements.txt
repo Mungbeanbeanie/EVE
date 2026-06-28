@@ -20,8 +20,11 @@ webrtcvad>=2.0.10    # voice-activity / silence detection
 setuptools<81
 pyaudio>=0.2.14      # raw mic capture + speaker playback
 
-# Text-to-speech (local)
+# Text-to-speech (local). Always-available offline voice + the runtime fallback.
 pyttsx3>=2.90
+# Text-to-speech (cloud, optional). Used only when ELEVENLABS_API_KEY is set; the
+# import is lazy, so EVE runs fine on the local voice if this isn't installed.
+elevenlabs>=2.0,<3
 
 # Wake-word detection (local, no torch) — only needed for VOICE_INPUT=wake.
 # Pretrained ONNX keyword models ("hey_jarvis", "alexa", …) run on CPU.
@@ -39,6 +42,17 @@ google-api-python-client>=2.120
 google-auth>=2.29
 google-auth-oauthlib>=1.2
 requests>=2.31       # HTTP for the Tavily web-search adapter
+
+# ─── Native desktop window (optional, macOS) ─────────────────────────────────
+# Only needed for the always-on NATIVE window: `python main.py --window`.
+# Without these, --window still works — it just opens the orb in your browser.
+#   rumps     → menu-bar (status-bar) app host; runs Dock-less (LSUIElement).
+#   pyobjc-*  → AppKit + WKWebView bindings used to host the web UI in a window.
+#   pywebview → fallback plain-window backend when the menu-bar host is missing.
+rumps>=0.4 ; sys_platform == "darwin"
+pyobjc-framework-Cocoa>=10.0 ; sys_platform == "darwin"
+pyobjc-framework-WebKit>=10.0 ; sys_platform == "darwin"
+pywebview>=5.0 ; sys_platform == "darwin"
 
 # ─── Dev / test ──────────────────────────────────────────────────────────────
 pytest>=8.0

@@ -8,13 +8,19 @@ LLM + memory + tools loop before touching the audio/GPU stack.
 Run:
     python main.py --mode text              # no audio hardware needed
     python main.py --mode voice             # needs mic/speaker, ffmpeg, Whisper
-    python main.py --mode voice --window    # + the on-screen visualizer orb
+    python main.py --mode voice --window    # + the native menu-bar window
+
+Threading note: a native window (macOS) must own the process's MAIN thread —
+Cocoa's hard rule. So in ``--window`` mode the agent's asyncio loop runs on a
+worker thread and the window owns the main thread. Headless mode keeps the agent
+on the main thread as before.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import threading
 
 from eve.agent import Agent
 from eve.config import load_config
@@ -40,10 +46,54 @@ def parse_args() -> argparse.Namespace:
         default=8765,
         help="port for the visualizer window server (default: 8765)",
     )
+    parser.add_argument(
+        "--dock",
+        action="store_true",
+        help="show a Dock icon (default: menu-bar only, no Dock icon)",
+    )
     return parser.parse_args()
 
 
-async def main() -> None:
+def _run_agent_thread(agent: Agent, mode: str) -> None:
+    """Run the agent's asyncio loop on a worker thread (window mode)."""
+    try:
+        asyncio.run(agent.start(mode=mode))
+    except KeyboardInterrupt:  # pragma: no cover - worker thread rarely sees this
+        pass
+
+
+def run_with_window(agent: Agent, args: argparse.Namespace) -> None:
+    """Window mode: native UI on the main thread, agent on a worker thread."""
+    from eve.ui import VizServer, launch_window
+
+    viz = VizServer(port=args.window_port).start(open_browser=False)
+    agent.set_viz(viz)
+
+    # The agent runs in the background; the window owns the main thread below.
+    worker = threading.Thread(
+        target=_run_agent_thread, args=(agent, args.mode), daemon=True
+    )
+    worker.start()
+
+    def on_quit() -> None:
+        agent.stop()
+        viz.stop()
+
+    ran_native = launch_window(
+        viz.url, title="EVE", hide_dock=not args.dock, menu_bar=True, on_quit=on_quit
+    )
+
+    # No native backend → the orb opened in a browser tab and launch_window
+    # returned immediately. Keep the process alive on the agent worker instead.
+    if not ran_native:
+        try:
+            worker.join()
+        except KeyboardInterrupt:
+            agent.stop()
+            viz.stop()
+
+
+def main() -> None:
     args = parse_args()
     config = load_config()
     setup_logging(config.log_level)
@@ -52,24 +102,15 @@ async def main() -> None:
     # together using only the abstract interfaces — see eve/agent.py.
     agent = Agent.from_config(config)
 
-    # Optional visualizer window: a local server hosts the glass-panel orb and
-    # the agent pushes its live state (listening/thinking/speaking) to it.
-    viz = None
     if args.window:
-        from eve.ui import VizServer
-
-        viz = VizServer(port=args.window_port).start(open_browser=True)
-        agent.set_viz(viz)
-
-    try:
-        await agent.start(mode=args.mode)
-    finally:
-        if viz is not None:
-            viz.stop()
+        run_with_window(agent, args)
+    else:
+        # Headless: the agent owns the main thread, as before.
+        asyncio.run(agent.start(mode=args.mode))
 
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         print("\nEVE shutting down. Bye!")

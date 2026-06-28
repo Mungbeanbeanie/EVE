@@ -41,9 +41,20 @@ class Config(BaseSettings):
     whisper_device: str = "auto"  # auto | cpu | cuda
 
     # ── Text-to-speech ───────────────────────────────────────────────────────
-    # Substring of the macOS/Windows voice name to use (case-insensitive), e.g.
+    # Substring of the local (pyttsx3) voice name to use (case-insensitive), e.g.
     # "Samantha", "Daniel", "Zoe". Leave blank to auto-pick an English voice.
     tts_voice: str | None = None
+
+    # ElevenLabs cloud TTS (optional). When `elevenlabs_api_key` is set, EVE uses
+    # ElevenLabs for higher-quality / custom (cloned) voices and falls back to the
+    # local pyttsx3 voice automatically if the key is absent or a request fails.
+    elevenlabs_api_key: str | None = None
+    # Voice id from your ElevenLabs library (Voices → ⋯ → "Copy voice ID"). The
+    # default is the stock "Rachel" voice; set this to your custom/cloned voice id.
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    # Low-latency models keep voice replies snappy: eleven_flash_v2_5 (fastest) or
+    # eleven_turbo_v2_5. Use eleven_multilingual_v2 only if you need top quality.
+    elevenlabs_model: str = "eleven_flash_v2_5"
 
     # ── Voice input mode ─────────────────────────────────────────────────────
     # "vad"  = always-listening, auto-segmented by silence detection.

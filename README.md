@@ -159,6 +159,14 @@ pip install faster-whisper webrtcvad pyttsx3 pyaudio
 python main.py --mode voice       # once the pipeline TODOs are filled in
 ```
 
+**Voice output** uses the local, offline `pyttsx3` engine by default. For a
+higher-quality or custom (cloned) voice, set `ELEVENLABS_API_KEY` and EVE switches
+to [ElevenLabs](https://elevenlabs.io) cloud TTS — streamed as PCM for low latency
+— falling back to the local voice automatically if the key is missing or a request
+fails. Pick a voice with `ELEVENLABS_VOICE_ID` (list them via
+`python -m eve.pipeline.tts`) and a model with `ELEVENLABS_MODEL`
+(`eleven_flash_v2_5` is the lowest-latency choice). See `.env.example`.
+
 > **PyAudio fails to build?** On Intel macOS with newer Python there's no prebuilt
 > wheel, so pip compiles from source and the compiler may not find Homebrew's
 > portaudio headers. Point it at them explicitly:

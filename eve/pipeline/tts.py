@@ -1,8 +1,17 @@
-"""Local text-to-speech with pyttsx3.
+"""Text-to-speech engines and the factory that selects one.
 
-pyttsx3 runs fully offline (no network latency) using the OS speech engine
-(NSSpeechSynthesizer on macOS, SAPI5 on Windows, espeak on Linux). It is
-synchronous and not thread-safe, so drive it carefully off the event loop.
+EVE has two interchangeable TTS backends behind the ``TTSEngine`` interface:
+
+* ``Pyttsx3TTS`` — fully offline (no network latency) via the OS speech engine
+  (NSSpeechSynthesizer on macOS, SAPI5 on Windows, espeak on Linux). It is
+  synchronous and not thread-safe, so drive it carefully off the event loop.
+* ``ElevenLabsTTS`` — cloud TTS for higher-quality / custom (cloned) voices,
+  streamed to the speaker as raw PCM for low time-to-first-audio.
+
+``build_tts(config)`` picks ElevenLabs when an API key is configured and
+otherwise uses the local engine — which also serves as the runtime fallback so a
+missing SDK, a bad key, or a failed request degrades to offline speech instead of
+a silent turn.
 """
 
 from __future__ import annotations
@@ -85,6 +94,110 @@ class Pyttsx3TTS(TTSEngine):
         await asyncio.to_thread(_speak)
 
 
+class ElevenLabsTTS(TTSEngine):
+    """Cloud TTS via ElevenLabs, streamed to the speaker as raw PCM.
+
+    Requests ``output_format="pcm_16000"`` — signed 16-bit little-endian mono at
+    16 kHz, which is exactly EVE's audio convention (see base.py) — and writes the
+    streamed chunks straight to PyAudio as they arrive, so the first audio plays
+    before the whole clip is synthesized (low time-to-first-audio).
+
+    Resilient by design: any failure (SDK not installed, network, quota, bad key)
+    is logged and delegated to ``fallback`` (the local pyttsx3 engine) so a turn is
+    never left silent.
+    """
+
+    # Matches output_format="pcm_16000" and the rest of the pipeline.
+    SAMPLE_RATE = 16_000
+
+    def __init__(self, config: Config, fallback: TTSEngine | None = None) -> None:
+        self.config = config
+        self.fallback = fallback
+        self._client = None  # lazy: only build the client / PyAudio on first use
+        self._pa = None
+
+    def _ensure_client(self) -> None:
+        """Build the ElevenLabs client and PyAudio output once, on first use."""
+        if self._client is not None:
+            return
+        from elevenlabs.client import ElevenLabs  # optional dep — import lazily
+        import pyaudio
+
+        self._client = ElevenLabs(api_key=self.config.elevenlabs_api_key)
+        self._pa = pyaudio.PyAudio()
+
+    async def speak(self, text: str) -> None:
+        """Stream `text` from ElevenLabs to the speaker; fall back on any error."""
+        try:
+            await asyncio.to_thread(self._stream_blocking, text)
+        except Exception as exc:  # network, quota, bad key, SDK missing, …
+            log.warning(
+                "ElevenLabs TTS failed (%s: %s); falling back to the local voice.",
+                type(exc).__name__,
+                exc,
+            )
+            if self.fallback is not None:
+                await self.fallback.speak(text)
+
+    def _stream_blocking(self, text: str) -> None:
+        """Synthesize and play synchronously (run off the event loop in a thread)."""
+        import pyaudio
+
+        self._ensure_client()
+        audio_stream = self._client.text_to_speech.convert(
+            self.config.elevenlabs_voice_id,  # voice_id is positional-first
+            text=text,
+            model_id=self.config.elevenlabs_model,
+            output_format="pcm_16000",
+        )
+        stream = self._pa.open(
+            format=pyaudio.paInt16, channels=1, rate=self.SAMPLE_RATE, output=True
+        )
+        try:
+            for chunk in audio_stream:
+                if chunk:
+                    stream.write(chunk)
+        finally:
+            stream.stop_stream()
+            stream.close()
+
+
+def build_tts(config: Config) -> TTSEngine:
+    """Select the TTS engine from config: ElevenLabs if a key is set, else local.
+
+    The local pyttsx3 engine is always constructed — both as the default and as
+    the runtime fallback for ElevenLabs — so EVE still talks if the optional SDK
+    is missing or a cloud request fails.
+    """
+    local = Pyttsx3TTS(config)
+    if not (config.elevenlabs_api_key or "").strip():
+        return local
+    try:
+        import elevenlabs  # noqa: F401 — verify the optional dependency is present
+    except ImportError:
+        log.warning(
+            "ELEVENLABS_API_KEY is set but the `elevenlabs` package is not "
+            "installed (pip install elevenlabs); using the local voice instead."
+        )
+        return local
+    log.info(
+        "TTS: ElevenLabs (voice_id=%s, model=%s)",
+        config.elevenlabs_voice_id,
+        config.elevenlabs_model,
+    )
+    return ElevenLabsTTS(config, fallback=local)
+
+
+def _list_elevenlabs_voices(config: Config) -> None:
+    """Print ElevenLabs voices (id + name) so you can pick ELEVENLABS_VOICE_ID."""
+    from elevenlabs.client import ElevenLabs
+
+    client = ElevenLabs(api_key=config.elevenlabs_api_key)
+    print("ElevenLabs voices (set ELEVENLABS_VOICE_ID to an id):\n")
+    for v in client.voices.get_all().voices:
+        print(f"  {getattr(v, 'name', '?'):<24} {v.voice_id}")
+
+
 def _list_voices() -> None:
     """Print installed TTS voices so you can pick one for TTS_VOICE in .env."""
     engine = pyttsx3.init()
@@ -98,4 +211,12 @@ def _list_voices() -> None:
 
 
 if __name__ == "__main__":  # `python -m eve.pipeline.tts`
-    _list_voices()
+    # List the voices for whichever backend is configured: ElevenLabs when a key
+    # is present (pick an ELEVENLABS_VOICE_ID), otherwise the local pyttsx3 voices.
+    from eve.config import load_config
+
+    cfg = load_config()
+    if (cfg.elevenlabs_api_key or "").strip():
+        _list_elevenlabs_voices(cfg)
+    else:
+        _list_voices()

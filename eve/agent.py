@@ -21,8 +21,9 @@ from eve.llm.factory import build_llm
 from eve.llm.sanitize import sanitize
 from eve.memory.manager import MemoryManager
 from eve.pipeline.audio_io import PyAudioIO
+from eve.pipeline.base import TTSEngine
 from eve.pipeline.stt import WhisperSTT
-from eve.pipeline.tts import Pyttsx3TTS
+from eve.pipeline.tts import build_tts
 from eve.tools.executor import ToolExecutor
 from eve.tools.registry import ToolRegistry
 from eve.tools.adapters.google import GoogleAdapter
@@ -40,7 +41,7 @@ class Agent:
         config: Config,
         audio: PyAudioIO,
         stt: WhisperSTT,
-        tts: Pyttsx3TTS,
+        tts: TTSEngine,
         llm,  # LLMClient — provider-agnostic, built by the factory
         memory: MemoryManager,
         tools: ToolRegistry,
@@ -94,7 +95,7 @@ class Agent:
             config=config,
             audio=PyAudioIO(config),
             stt=WhisperSTT(config),
-            tts=Pyttsx3TTS(config),
+            tts=build_tts(config),
             llm=build_llm(config),
             memory=memory,
             tools=tools,
@@ -102,6 +103,15 @@ class Agent:
         )
 
     # ── Entrypoints ──────────────────────────────────────────────────────────
+    def stop(self) -> None:
+        """Ask the run loop to exit after its current turn.
+
+        Safe to call from another thread (e.g. the window's Quit handler). The
+        loop checks ``self._running`` between turns; a turn already blocked on the
+        mic/stdin finishes or is abandoned when the process exits.
+        """
+        self._running = False
+
     async def start(self, mode: str) -> None:
         """Run the agent in the requested mode until interrupted."""
         self._running = True

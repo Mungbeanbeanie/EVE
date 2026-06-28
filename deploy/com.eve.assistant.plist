@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd LaunchAgent for EVE — runs the always-on voice assistant with its
+  native menu-bar window in your GUI session.
+
+  This file is a TEMPLATE. `deploy/install-agent.sh` substitutes the __PLACEHOLDERS__
+  for absolute paths and installs the result to ~/Library/LaunchAgents/. Do not
+  load this template directly.
+
+  LaunchAgents (vs LaunchDaemons) run inside the logged-in user's Aqua session,
+  so EVE can open a window and use the microphone. KeepAlive restarts it if it
+  crashes; RunAtLoad starts it at login.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.eve.assistant</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON__</string>
+        <string>__EVE_DIR__/main.py</string>
+        <string>--mode</string>
+        <string>voice</string>
+        <string>--window</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__EVE_DIR__</string>
+
+    <!-- Start at login and keep it alive across crashes. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Only run in the graphical (Aqua) session — EVE needs a window + mic. -->
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+
+    <!-- Throttle restart storms if EVE exits immediately (e.g. bad config). -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/eve.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/eve.err.log</string>
+</dict>
+</plist>
