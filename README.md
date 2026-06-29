@@ -1,89 +1,234 @@
 # EVE — your personal AI agent
 
-EVE is a voice-driven AI agent that lives on your computer: it listens, remembers
-what matters across sessions, and acts through Google and web-search tools. It runs
-as a single local process.
+EVE is a voice-driven AI agent that lives on your computer, remembers what matters,
+and can act on your behalf through Google and web-search tools. 
 
-## How it works
+---
+
+## Architecture
 
 ```
-VOICE   Mic ─▶ STT (faster-whisper) ─▶ LLM (any provider) ─▶ TTS ─▶ Speaker
-MEMORY  turn ─▶ working memory ─▶ { procedural, episodic }  (mem0 → FAISS on disk)
-TOOLS   LLM ─▶ tool registry ─▶ Google / web-search adapters ─▶ result
+VOICE   Mic ─▶ STT (faster-whisper, local) ─▶ sanitize ─▶ LLM (any provider) ─▶ TTS ─▶ Speaker
+
+MEMORY  message ─▶ working memory ─▶ { procedural, episodic } stores (mem0 + FAISS, on disk)
+                          ▲                      │
+                          └──── vector recall ◀──┘
+
+TOOLS   LLM ─▶ tool registry ─▶ tool executor ─▶ Google / web-search adapter ─▶ result
 ```
 
-- **Provider-agnostic LLM** via LiteLLM (`anthropic/…`, `openai/…`, `gemini/…`, `ollama/…`).
-- **Long-term memory on disk** — a FAISS index embedded with FastEmbed (ONNX).
-- **Visualizer window** — a glass-panel orb that reflects EVE's state (listening / thinking / speaking).
+Three design choices shape the code:
+
+- **Provider-agnostic LLM.** EVE is not tied to any vendor. `build_llm(config)` returns
+  a client driven by a model string (`anthropic/…`, `openai/…`, `gemini/…`, `ollama/…`);
+  the default uses [LiteLLM](https://docs.litellm.ai/) so one interface speaks to all.
+- **Three memory layers** behind one `MemoryManager`: **working** (volatile context),
+  **procedural** (learned preferences/skills), **episodic** (timestamped events).
+  Durable layers persist on disk via [mem0](https://docs.mem0.ai/) — a local FAISS
+  vector index embedded with [FastEmbed](https://github.com/qdrant/fastembed)
+  (ONNX). No database, no network service: EVE is one self-contained process.
+- **Swappable everything.** The `Agent` depends only on abstract interfaces, so each
+  subsystem can be replaced without touching the orchestrator.
+
+
+---
 
 ## Prerequisites
 
-- Python 3.11+
-- An LLM API key (or a local Ollama model)
-- For voice: `portaudio` — `brew install portaudio` (macOS) or
-  `apt-get install portaudio19-dev espeak` (Debian/Ubuntu)
+- **Python 3.11+**
+- **System packages** (not pip): `portaudio` (for PyAudio); `ffmpeg` is optional but handy.
+  - macOS: `brew install portaudio` (and `brew install ffmpeg` if you want it)
+  - Debian/Ubuntu: `apt-get install portaudio19-dev espeak` (+ `ffmpeg`)
+- An **LLM API key** for whatever provider you choose (or a local Ollama model).
 
-Memory is a local file; the embedder model (~520MB) downloads and caches on first run.
+---
 
-## Quickstart — always-on, with the visual interface (default)
+## Quickstart
 
-```bash
-make setup            # venv + deps + .env
-#  → edit .env: set LLM_MODEL and the matching API key
-make install-voice    # mic / STT / TTS stack
-make install-window   # native menu-bar window (macOS)
-make install-agent    # start EVE at login: voice + window, auto-restart
-```
+### TL;DR (with `make`)
 
-`install-agent` registers a macOS **launchd LaunchAgent** that launches EVE
-automatically once you're logged in (voice mode with the visualizer) and restarts it
-if it crashes. Logs: `~/Library/Logs/eve.{out,err}.log`. Remove with `make uninstall-agent`.
-
-### Run manually / develop
+A `Makefile` wraps every step below. From a clean clone:
 
 ```bash
-make run              # text-mode REPL (no audio)
-make voice            # voice mode
-make window-voice     # voice + native window
-make test             # smoke tests
+make setup        # create venv, install deps, scaffold .env (then edit .env)
+make run          # text-mode REPL
 ```
 
-## Configure (`.env`)
-
-| Key | What |
-| --- | --- |
-| `LLM_MODEL` | LiteLLM string, e.g. `anthropic/claude-opus-4-8`, `openai/gpt-4o` |
-| `LLM_API_KEY` | key for that provider (or set `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / …) |
-| `MEMORY_DIR` | where long-term memory persists (default `~/.eve/memory`) |
-| `EMBEDDER_MODEL` / `EMBEDDING_DIMS` | in-process FastEmbed model + its dims (default nomic, 768) |
-| `ELEVENLABS_API_KEY` | optional cloud TTS; falls back to local pyttsx3 voice |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional Gmail/Calendar/Drive tools (OAuth) |
-| `TAVILY_API_KEY` | optional live web search |
-
-Everything optional degrades gracefully — a missing key or model never crashes a turn,
-it just disables that capability. See `.env.example` for the full annotated list.
-
-## Notes
-
-- **Voice output** uses offline `pyttsx3` by default; set `ELEVENLABS_API_KEY` for cloud
-  voices (incl. cloned). Pick one with `ELEVENLABS_VOICE_ID` (`python -m eve.pipeline.tts`).
-- **Window** is a zero-dependency HTML5 canvas served over SSE — no Electron, no npm.
-  Without the native deps, `--window` just opens the orb in your browser.
-- **Google tools** run a one-time browser OAuth consent on first use, caching a token at
-  `GOOGLE_TOKEN_PATH`. `calendar_create_event` writes, so EVE asks to confirm before it runs.
-- **PyAudio fails to build (Intel macOS)?** Point it at Homebrew's portaudio:
-  `export CFLAGS="-I$(brew --prefix portaudio)/include" LDFLAGS="-L$(brew --prefix portaudio)/lib"`
-
-## Layout
-
-```
-eve/  config · agent · pipeline (audio · vad · stt · tts) · llm · memory · tools · ui
-main.py   entrypoint: --mode {voice,text} [--window]
-deploy/   launchd LaunchAgent (always-on) + installer
+```bash
+make install-voice   # add the mic/STT/TTS stack, then: make voice
+make test            # run the test suite
+make dist            # versioned source tarball in dist/
+make install-agent   # run EVE always-on at login (macOS launchd)
 ```
 
-## License
+The rest of this section explains each step manually.
 
-MIT — see [LICENSE](LICENSE).
-</content>
-</invoke>
+### 1. Configure
+
+```bash
+cp .env.example .env          # then fill in LLM_PROVIDER/LLM_MODEL + key
+```
+
+Two things to know about `.env`:
+
+- **`LLM_MODEL` format:** it's a LiteLLM model string, `provider/model`
+  (e.g. `groq/llama-3.3-70b-versatile`, `anthropic/claude-opus-4-8`). EVE strips
+  the `provider/` prefix automatically where mem0's native client needs the bare name.
+- **Memory needs nothing.** Long-term memory persists to `MEMORY_DIR`
+  (default `~/.eve/memory`) as a FAISS index, and `EMBEDDER_MODEL` runs in-process
+  via FastEmbed — it downloads and caches once on first run. To use a different
+  embedder, set `EMBEDDER_MODEL` and a matching `EMBEDDING_DIMS` (see `.env.example`).
+
+### 2. Install + run
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt   # core: LLM + memory + tools
+
+python main.py --mode text        # fastest path: develop the brain without audio
+```
+
+In text mode, each turn responds as soon as the LLM replies — durable memory is
+written in the **background**, so a slow mem0 write never blocks the conversation.
+On exit, EVE flushes any in-flight writes so the last turn isn't lost (this can add
+a short pause when you quit).
+
+The **voice stack is optional and installed separately** (it needs system audio
+support and is the last MVP piece). When you're ready:
+
+```bash
+brew install portaudio            # macOS system dep for PyAudio
+pip install faster-whisper webrtcvad pyttsx3 pyaudio
+
+python main.py --mode voice       # once the pipeline TODOs are filled in
+```
+
+**Voice output** uses the local, offline `pyttsx3` engine by default. For a
+higher-quality or custom (cloned) voice, set `ELEVENLABS_API_KEY` and EVE switches
+to [ElevenLabs](https://elevenlabs.io) cloud TTS — streamed as PCM for low latency
+— falling back to the local voice automatically if the key is missing or a request
+fails. Pick a voice with `ELEVENLABS_VOICE_ID` (list them via
+`python -m eve.pipeline.tts`) and a model with `ELEVENLABS_MODEL`
+(`eleven_flash_v2_5` is the lowest-latency choice). See `.env.example`.
+
+> **PyAudio fails to build?** On Intel macOS with newer Python there's no prebuilt
+> wheel, so pip compiles from source and the compiler may not find Homebrew's
+> portaudio headers. Point it at them explicitly:
+>
+> ```bash
+> export CFLAGS="-I$(brew --prefix portaudio)/include"
+> export LDFLAGS="-L$(brew --prefix portaudio)/lib"
+> pip install --no-cache-dir pyaudio
+> ```
+
+### Run the smoke tests
+
+```bash
+pytest -q                     # checks the skeleton wires together
+```
+
+### Swap your LLM
+
+No code change — edit `.env`:
+
+```env
+LLM_MODEL=openai/gpt-4o          # or gemini/gemini-1.5-pro, ollama/llama3, …
+OPENAI_API_KEY=sk-...
+```
+
+### Google Workspace tools (optional)
+
+EVE can search Gmail, list/create Calendar events, and list Drive files. These are
+exposed to the LLM as tools (`gmail_search`, `calendar_list_events`,
+`calendar_create_event`, `drive_list_files`). Until you configure OAuth they simply
+return a structured `{"error": ...}` the model can read — nothing crashes.
+
+To enable them:
+
+1. **Create an OAuth client** in the [Google Cloud Console](https://console.cloud.google.com/):
+   - Create (or pick) a project, then **APIs & Services → Enable APIs** and enable
+     the **Gmail API**, **Google Calendar API**, and **Google Drive API**.
+   - **APIs & Services → OAuth consent screen**: configure it (External is fine for
+     personal use), and add your Google account under **Test users**.
+   - **APIs & Services → Credentials → Create credentials → OAuth client ID**, type
+     **Desktop app**. (Desktop clients allow the `localhost` redirect EVE uses.)
+2. **Add the credentials to `.env`:**
+
+   ```env
+   GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=xxxx
+   GOOGLE_TOKEN_PATH=./.secrets/google_token.json   # where the cached token is stored
+   ```
+3. **First run consents once.** The first time EVE calls a Google tool it opens a
+   browser for you to grant access, then caches the token at `GOOGLE_TOKEN_PATH`;
+   later runs reuse and auto-refresh it. Approve the scopes it requests:
+   `gmail.readonly`, `calendar.events`, `drive.metadata.readonly` (defined as
+   `SCOPES` in `eve/tools/adapters/google.py`).
+
+> **Re-consent after changing scopes.** If you edit `SCOPES`, delete the cached
+> token file so EVE runs the consent flow again with the new permissions.
+
+> ⚠️ `calendar_create_event` **writes** to your calendar, so it's flagged
+> `destructive=True`. Before any destructive tool runs, EVE pauses and asks you to
+> confirm over the current channel — a `[y/N]` prompt in text mode, or a spoken
+> "shall I go ahead?" in voice mode (`Agent._confirm_destructive` in `eve/agent.py`).
+> Anything that isn't a clear yes is treated as a decline.
+
+### Web search (optional)
+
+EVE can search the live web via [Tavily](https://tavily.com/) — exposed as the
+read-only tool `web_search`. It returns ranked results (title, URL, snippet) plus a
+short synthesized answer, so the model can look up current facts beyond its training
+cutoff. Like the Google tools, it returns a structured `{"error": ...}` until
+configured, so nothing crashes.
+
+Get a free API key at [app.tavily.com](https://app.tavily.com) (no card required)
+and add it to `.env`:
+
+```env
+TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxx
+```
+
+That's all — `web_search` is read-only, so there's no OAuth and no confirmation gate.
+
+### Visualizer window (optional)
+
+EVE ships with a **glass-panel voice visualizer**: a rotating neural-network orb
+(amber particle sphere, signal pulses, glowing core, orbital rings + HUD arcs)
+that reacts to EVE's conversational state. It's a zero-dependency web frontend
+(HTML5 Canvas) served by a small stdlib HTTP server — no Electron, no npm, no
+extra pip installs.
+
+```bash
+make window          # preview the window standalone (synthetic animation)
+make window-voice    # voice mode with the live orb attached
+# or directly:
+python -m eve.ui                    # standalone preview
+python main.py --mode voice --window
+```
+
+When the agent runs with `--window`, it pushes its pipeline state to the browser
+over **Server-Sent Events**, so the orb mirrors the real loop:
+`listening → thinking → speaking → idle`. In the browser, the orb's *loudness*
+(radius/brightness pulsing) is driven by the **real microphone** via the Web
+Audio API; the *state* comes from the Python agent. Without a backend the window
+is fully self-contained — every control animates the orb locally.
+
+The renderer (`eve/ui/web/eve-orb.js`) and its tuning file
+(`eve/ui/web/eve.config.json`) come straight from the design handoff; retune
+`particleCount`, palettes, depth-of-field, rotation, and per-state energy there.
+
+```
+eve/ui/
+  server.py            stdlib HTTP + SSE bridge (VizServer); drives the orb from agent state
+  __main__.py          `python -m eve.ui` — standalone window preview
+  web/
+    index.html         glass panel: title bar · canvas · controls
+    styles.css         design tokens + window chrome
+    app.js             orb wiring · mic energy · controls · SSE client
+    eve-orb.js         the neural-orb renderer (from the handoff)
+    eve.config.json    palettes / particle count / motion / per-state energy
+```
+
+---
+
