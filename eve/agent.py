@@ -2,13 +2,8 @@
 
 This is the spine of EVE. It owns one instance of each subsystem (audio I/O, STT,
 TTS, the LLM client, the memory manager, and the tool registry/executor) and runs
-the main loop. It depends ONLY on the abstract interfaces, so any implementation
+the main loop. It depends only on the abstract interfaces, so any implementation
 can be swapped without touching this file.
-
-This file is written "for real" (the wiring) on purpose: the loop calls into the
-subsystem methods, which are the stubs you will implement. When a stub raises
-NotImplementedError, the loop catches it and tells you exactly which file/TODO to
-go fill in — so you can build the agent one piece at a time and always run it.
 """
 
 from __future__ import annotations
@@ -88,9 +83,8 @@ class Agent:
     def from_config(cls, config: Config) -> "Agent":
         """Build a fully-wired Agent from configuration.
 
-        Construction is real plumbing; the constructed objects' *behavior* is what
-        you implement. Note how nothing here mentions a specific LLM vendor — the
-        factory resolves that from config.
+        Nothing here names a specific LLM vendor — the factory resolves the client
+        from config, so the agent stays provider-agnostic.
         """
         memory = MemoryManager.from_config(config)
         tools = ToolRegistry()
@@ -217,8 +211,9 @@ class Agent:
     async def _handle_turn(self, text: str, *, speak: bool) -> None:
         """Process a single user utterance end-to-end.
 
-        Wraps the pipeline so an unimplemented stub becomes a friendly hint rather
-        than a crash — letting you build EVE incrementally.
+        Wraps the pipeline so an unconfigured component (e.g. a direct provider
+        client that raises NotImplementedError) surfaces a friendly hint rather
+        than crashing the session.
         """
         # Remember which channel this turn uses so a mid-turn confirmation prompt
         # (triggered by the LLM calling a destructive tool) reaches the user the same
@@ -250,8 +245,8 @@ class Agent:
                 print(f"eve > {reply}")
 
         except NotImplementedError as exc:
-            log.warning("Not implemented yet → %s", exc)
-            print(f"[EVE stub] {exc}")
+            log.warning("Component not available → %s", exc)
+            print(f"[EVE] {exc}")
         except Exception as exc:
             # One bad turn (network blip, tool error, runaway loop) must not kill the
             # session — log it, tell the user, and return to listening.

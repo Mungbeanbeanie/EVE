@@ -1,9 +1,9 @@
 # ─── EVE runtime dependencies ────────────────────────────────────────────────
-# Pinned loosely (>=) so you can learn against current docs. Tighten before prod.
+# Lower bounds (>=) only; pin exact versions before a production deployment.
 
-# LLM — provider-agnostic. LiteLLM gives ONE interface to Anthropic, OpenAI,
-# Gemini, Ollama, etc. You do NOT need a provider SDK unless you write a direct
-# client in eve/llm/providers.py (those imports are lazy, so missing SDKs are fine).
+# LLM — provider-agnostic. LiteLLM gives one interface to Anthropic, OpenAI,
+# Gemini, Ollama, etc. A provider SDK is needed only for a direct client in
+# eve/llm/providers.py, and those imports are lazy, so missing SDKs are fine.
 litellm>=1.40
 
 # Config / env

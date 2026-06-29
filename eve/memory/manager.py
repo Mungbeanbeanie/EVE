@@ -6,8 +6,6 @@ It owns all three layers and exposes two verbs:
                         working window with relevant procedural + episodic memories.
     remember(...)    -> write a turn to the right layers (always episodic/working;
                         procedural only when something durable was learned).
-
-Construction is real wiring; the read/write *policies* are the learning exercise.
 """
 
 from __future__ import annotations
@@ -42,7 +40,7 @@ class MemoryManager:
 
     @classmethod
     def from_config(cls, config: Config) -> "MemoryManager":
-        """Build the manager and all three layers from config (real wiring)."""
+        """Build the manager and all three layers from config."""
         backend = Mem0Backend(config)  # shared mem0 client: FAISS index + FastEmbed (lazy)
         return cls(
             working=WorkingMemory(),

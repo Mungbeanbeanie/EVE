@@ -13,7 +13,7 @@ Run:
 Threading note: a native window (macOS) must own the process's MAIN thread —
 Cocoa's hard rule. So in ``--window`` mode the agent's asyncio loop runs on a
 worker thread and the window owns the main thread. Headless mode keeps the agent
-on the main thread as before.
+on the main thread.
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ def main() -> None:
     if args.window:
         run_with_window(agent, args)
     else:
-        # Headless: the agent owns the main thread, as before.
+        # Headless: the agent owns the main thread.
         asyncio.run(agent.start(mode=args.mode))
 
 

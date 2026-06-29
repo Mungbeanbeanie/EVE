@@ -20,7 +20,7 @@ class VoiceActivityDetector:
         """Create a VAD.
 
         aggressiveness: 0 (most permissive) .. 3 (most aggressive at filtering
-        non-speech). Store these; build the webrtcvad.Vad in the TODO below.
+        non-speech).
         """
         self.sample_rate = sample_rate
         self.aggressiveness = aggressiveness

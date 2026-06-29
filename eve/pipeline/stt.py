@@ -1,9 +1,9 @@
 """Local speech-to-text with faster-whisper (CTranslate2 backend, no torch).
 
-faster-whisper runs the Whisper models through CTranslate2, so it needs NO torch —
-which is exactly why it works on Intel macOS where PyTorch no longer ships wheels.
-It's also CPU-friendly and typically faster than openai-whisper, helping the MVP
-goal of transcribing "not super delayed".
+faster-whisper runs the Whisper models through CTranslate2, so it needs no torch —
+which is why it works on Intel macOS, where PyTorch no longer ships wheels. It is
+also CPU-friendly and typically faster than openai-whisper, keeping transcription
+latency low.
 
 Key API (https://github.com/SYSTRAN/faster-whisper):
     from faster_whisper import WhisperModel
@@ -46,20 +46,16 @@ class WhisperSTT(STTEngine):
         self._model = WhisperModel(self.model_name, device=device, compute_type=compute_type)
 
     async def transcribe(self, audio: bytes) -> str:
-        """Convert a PCM audio buffer to text.
-
-        Part of: Mic -> STT -> sanitize -> LLM. Returns the recognized utterance.
-        """
+        """Convert a PCM audio buffer to text and return the recognized utterance."""
         self._ensure_model()
         samples = np.frombuffer(audio, np.int16).astype(np.float32) / 32768.0
 
         def transcribe() -> str:
             start = time.perf_counter()
-            segments, info = self._model.transcribe(samples, language="en")
+            segments, _info = self._model.transcribe(samples, language="en")
             text = " ".join(seg.text for seg in segments).strip()
-            elapsed = time.perf_counter() - start
-            log.debug("Transcription took %.2fs", elapsed)
+            log.debug("Transcription took %.2fs", time.perf_counter() - start)
             return text
-    
+
         return await asyncio.to_thread(transcribe)
-    
+

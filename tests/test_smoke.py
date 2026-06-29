@@ -25,7 +25,7 @@ def test_imports_clean():
     import eve.agent  # noqa: F401
 
 
-def test_sanitize_is_noop_safe():
+def test_sanitize_trims_plain_text():
     assert sanitize("  hello  ") == "hello"
 
 

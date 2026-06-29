@@ -2,8 +2,7 @@
 
 All runtime settings live here so the rest of the codebase never reads os.environ
 directly. Values come from environment variables / the `.env` file (see
-`.env.example`). This file IS fully implemented — config loading is plumbing, not
-the learning exercise.
+`.env.example`).
 """
 
 from __future__ import annotations

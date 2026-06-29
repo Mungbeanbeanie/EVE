@@ -1,7 +1,7 @@
 # EVE — your personal AI agent
 
 EVE is a voice-driven AI agent that lives on your computer, remembers what matters,
-and can act on your behalf through Google and web-search tools. 
+and can act on your behalf through Google and web-search tools.
 
 ---
 
@@ -85,7 +85,7 @@ Two things to know about `.env`:
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt   # core: LLM + memory + tools
 
-python main.py --mode text        # fastest path: develop the brain without audio
+python main.py --mode text        # fastest path: run the agent without audio
 ```
 
 In text mode, each turn responds as soon as the LLM replies — durable memory is
@@ -94,13 +94,13 @@ On exit, EVE flushes any in-flight writes so the last turn isn't lost (this can 
 a short pause when you quit).
 
 The **voice stack is optional and installed separately** (it needs system audio
-support and is the last MVP piece). When you're ready:
+support):
 
 ```bash
 brew install portaudio            # macOS system dep for PyAudio
 pip install faster-whisper webrtcvad pyttsx3 pyaudio
 
-python main.py --mode voice       # once the pipeline TODOs are filled in
+python main.py --mode voice       # mic → STT → LLM → TTS → speaker
 ```
 
 **Voice output** uses the local, offline `pyttsx3` engine by default. For a
@@ -121,10 +121,10 @@ fails. Pick a voice with `ELEVENLABS_VOICE_ID` (list them via
 > pip install --no-cache-dir pyaudio
 > ```
 
-### Run the smoke tests
+### Run the tests
 
 ```bash
-pytest -q                     # checks the skeleton wires together
+pytest -q                     # hardware-free unit + wiring tests
 ```
 
 ### Swap your LLM

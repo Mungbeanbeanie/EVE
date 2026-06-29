@@ -1,10 +1,10 @@
 """LLM factory — turns config into a concrete LLMClient.
 
-This is real wiring (a dispatch table), so the rest of EVE stays vendor-neutral:
-the agent just calls `build_llm(config)`.
+A small dispatch table keeps the rest of EVE vendor-neutral: the agent just calls
+`build_llm(config)`.
 
-Default path: LiteLLMClient, which already supports every provider via the
-`llm_model` string (e.g. "anthropic/...", "openai/...", "gemini/...", "ollama/...").
+Default path: LiteLLMClient, which supports every provider via the `llm_model`
+string (e.g. "anthropic/...", "openai/...", "gemini/...", "ollama/...").
 
 Escape hatch: set `LLM_PROVIDER` to `direct:anthropic` / `direct:openai` /
 `direct:ollama` to use a hand-written client from providers.py instead.

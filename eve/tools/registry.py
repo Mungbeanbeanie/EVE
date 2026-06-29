@@ -1,8 +1,7 @@
 """ToolRegistry — the catalogue of everything EVE can do.
 
-This is real plumbing (implemented): adapters register Tools here, and the LLM
-client asks for `specs()` to tell the model what's available. Dispatch/execution
-lives in ToolExecutor.
+Adapters register Tools here, and the LLM client asks for `specs()` to tell the
+model what's available. Dispatch and execution live in ToolExecutor.
 """
 
 from __future__ import annotations

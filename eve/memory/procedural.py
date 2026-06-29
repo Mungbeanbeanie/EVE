@@ -29,8 +29,9 @@ class ProceduralMemory(MemoryStore):
     async def add(self, content: str, metadata: dict[str, Any] | None = None) -> None:
         """Persist a learned preference/skill."""
         mem = self.backend.client()
-        await asyncio.to_thread(mem.add, content, user_id=PROCEDURAL_NS, metadata=metadata or {
-        })
+        await asyncio.to_thread(
+            mem.add, content, user_id=PROCEDURAL_NS, metadata=metadata or {}
+        )
 
     async def search(self, query: str, k: int = 5) -> list[MemoryRecord]:
         """Return preferences/skills relevant to `query`."""

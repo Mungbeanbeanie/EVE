@@ -1,8 +1,8 @@
-"""Hardware-free regression tests for the voice pipeline.
+"""Hardware-free tests for the voice pipeline.
 
-These cover bugs that broke the voice path end-to-end without touching a real mic
-or speaker: the VAD must actually return a decision, and the STT must satisfy the
-STTEngine interface (be instantiable + transcribe real PCM).
+These exercise the voice path without touching a real mic or speaker: the VAD must
+return a boolean decision, and the STT must satisfy the STTEngine interface (be
+instantiable and transcribe real PCM).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from eve.pipeline.vad import VoiceActivityDetector
 
 # ── VAD ──────────────────────────────────────────────────────────────────────
 def test_is_speech_returns_bool_for_silence():
-    """Silence must return a real boolean (the bug returned None → infinite record loop)."""
+    """Silence must return a real boolean; None would stall the record loop."""
     vad = VoiceActivityDetector(sample_rate=16_000)
     decision = vad.is_speech(b"\x00" * vad.frame_bytes())
     assert isinstance(decision, bool)
@@ -39,7 +39,7 @@ def test_frame_bytes_matches_16khz_30ms():
 
 # ── STT ──────────────────────────────────────────────────────────────────────
 def test_whisper_stt_satisfies_interface():
-    """WhisperSTT must implement the abstract `transcribe` (the bug named it `_transcribe`)."""
+    """WhisperSTT must implement the abstract `transcribe` method."""
     stt = WhisperSTT(Config())
     assert isinstance(stt, STTEngine)
     assert hasattr(stt, "transcribe")

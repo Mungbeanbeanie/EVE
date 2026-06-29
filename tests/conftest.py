@@ -1,8 +1,7 @@
 """Shared pytest fixtures.
 
-Enables asyncio tests and provides a Config that doesn't depend on a real `.env`
-or real keys — the smoke tests only check that the skeleton wires together, not
-that any feature works.
+Provides a Config that doesn't depend on a real `.env` or real keys, so tests run
+without any secrets or network access.
 """
 
 from __future__ import annotations

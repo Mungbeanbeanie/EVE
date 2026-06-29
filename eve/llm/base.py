@@ -16,21 +16,11 @@ Keeping this contract identical across providers is what makes EVE model-agnosti
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from typing import Any
 
 # A "message" is the standard chat shape: {"role": "user"|"assistant"|"system"|"tool",
 # "content": str, ...}. We keep it as a plain dict for portability across providers.
 Message = dict[str, Any]
-
-
-@dataclass
-class LLMResponse:
-    """Structured result of one `respond` call (handy if you want more than text)."""
-
-    text: str
-    raw: Any = None  # the provider's raw response object, for debugging
-    tool_calls: list[dict] = field(default_factory=list)
 
 
 class LLMClient(ABC):

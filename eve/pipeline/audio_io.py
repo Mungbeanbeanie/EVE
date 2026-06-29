@@ -1,8 +1,8 @@
 """Microphone capture + speaker playback via PyAudio, segmented with VAD.
 
 This is the bridge between hardware and the rest of EVE. `record_utterance`
-should open the mic, stream frames through the VAD, and return the PCM buffer for
-one utterance (from first speech to a trailing run of silence).
+opens the mic, streams frames through the VAD, and returns the PCM buffer for one
+utterance (from first speech to a trailing run of silence).
 """
 
 from __future__ import annotations
@@ -46,7 +46,8 @@ class PyAudioIO(AudioIO):
     async def record_utterance(self) -> bytes:
         """Capture a single spoken utterance and return it as PCM bytes.
 
-        Suggested approach:
+        Streams mic frames through the VAD, starting the buffer at the first
+        speech frame and ending it after a short run of trailing silence.
         """
         def record_blocking() -> bytes:
             chunk = self.vad.frame_bytes() // 2  # samples per VAD frame

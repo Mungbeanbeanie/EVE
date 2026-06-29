@@ -1,12 +1,16 @@
 """Optional direct (per-vendor) LLM clients.
 
-You usually DON'T need these — LiteLLMClient already speaks to every provider. They
-exist so you can learn a vendor SDK directly, or use a provider feature LiteLLM
-doesn't expose. Each implements the same LLMClient interface, so the factory can
-return any of them interchangeably.
+These are alternatives to LiteLLMClient, which already speaks to every provider.
+They exist for cases that need a vendor SDK directly, or a provider feature
+LiteLLM does not expose. Each implements the same LLMClient interface, so the
+factory can return any of them interchangeably via ``LLM_PROVIDER=direct:<name>``.
 
-Imports are intentionally LAZY (inside methods) so that missing SDKs never break
-the app at import time — you only pay for what you actually use.
+Vendor SDK imports are lazy (inside methods) so that a missing SDK never breaks
+the app at import time.
+
+The clients below are not implemented; selecting one without filling in its
+``respond`` method raises NotImplementedError, which the agent reports as a
+friendly message rather than crashing.
 """
 
 from __future__ import annotations
@@ -23,11 +27,11 @@ class AnthropicClient(LLMClient):
         self.api_key = config.llm_api_key
 
     async def respond(self, messages: list[Message], tools=None, executor=None) -> str:
-        # TODO(eve): lazy import:  from anthropic import AsyncAnthropic
-        # TODO(eve): build client, call messages.create(...), run the tool-use loop,
-        #            return the final text. Mirror LiteLLMClient.respond's contract.
+        # An implementation lazily imports the Anthropic SDK, runs the tool-use
+        # loop, and returns the final text, mirroring LiteLLMClient.respond.
         raise NotImplementedError(
-            "Implement direct Anthropic client — see eve/llm/providers.py:AnthropicClient"
+            "Direct Anthropic client is not implemented; use the default LiteLLM "
+            "client or implement AnthropicClient.respond in eve/llm/providers.py."
         )
 
 
@@ -39,9 +43,11 @@ class OpenAIClient(LLMClient):
         self.api_key = config.llm_api_key
 
     async def respond(self, messages: list[Message], tools=None, executor=None) -> str:
-        # TODO(eve): lazy import:  from openai import AsyncOpenAI
+        # An implementation lazily imports the OpenAI SDK, runs the tool-use loop,
+        # and returns the final text, mirroring LiteLLMClient.respond.
         raise NotImplementedError(
-            "Implement direct OpenAI client — see eve/llm/providers.py:OpenAIClient"
+            "Direct OpenAI client is not implemented; use the default LiteLLM "
+            "client or implement OpenAIClient.respond in eve/llm/providers.py."
         )
 
 
@@ -53,7 +59,9 @@ class OllamaClient(LLMClient):
         self.api_base = config.llm_api_base or "http://localhost:11434"
 
     async def respond(self, messages: list[Message], tools=None, executor=None) -> str:
-        # TODO(eve): call the Ollama HTTP API (or the `ollama` python package).
+        # An implementation calls the Ollama HTTP API (or the `ollama` package),
+        # runs the tool-use loop, and returns the final text.
         raise NotImplementedError(
-            "Implement Ollama client — see eve/llm/providers.py:OllamaClient"
+            "Direct Ollama client is not implemented; use the default LiteLLM "
+            "client (LLM_MODEL=ollama/...) or implement OllamaClient.respond."
         )

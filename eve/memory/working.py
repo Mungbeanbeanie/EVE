@@ -1,9 +1,9 @@
 """Working memory — the live, volatile conversation window.
 
 Think of this as the agent's short-term "RAM": the recent turns that are always in
-context, no database involved. The basic append/snapshot plumbing is implemented so
-the loop runs; the *interesting* parts (token-budgeting, summarizing overflow) are
-left for you.
+context, no database involved. It keeps a bounded rolling buffer of messages and
+assembles them (with any retrieved long-term memories) into the list sent to the
+model.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ class WorkingMemory:
                                                 
                                                 "One rule above all: you are on the user's side, always.")
 
-    # ── Writes (plumbing — implemented) ──────────────────────────────────────
+    # ── Writes ───────────────────────────────────────────────────────────────
     def add_user(self, text: str) -> None:
         self._buffer.append({"role": "user", "content": text})
 
@@ -58,12 +58,13 @@ class WorkingMemory:
         """Return current messages as a list (system prompt first)."""
         return [{"role": "system", "content": self.system_prompt}, *self._buffer]
 
-    # ── Context shaping (the learning part) ──────────────────────────────────
+    # ── Context shaping ──────────────────────────────────────────────────────
     def render(self, retrieved: list[Message] | None = None) -> list[Message]:
         """Build the final message list sent to the LLM.
 
-        This is where short-term (working) and long-term (retrieved) memory meet.
-        Token budgeting / overflow summarisation is not yet implemented.
+        This is where short-term (working) and long-term (retrieved) memory meet:
+        the system prompt and rolling buffer are combined with any retrieved
+        memories into the ordered message list the model receives.
         """
         curr_messages = self.snapshot()
         if retrieved:
