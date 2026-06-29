@@ -75,7 +75,11 @@ def run_with_window(agent: Agent, args: argparse.Namespace) -> None:
     # The bridge is the browser → agent channel; the server feeds it from POSTs
     # and the agent consumes it in run_window().
     bridge = InputBridge()
-    viz = VizServer(port=args.window_port, bridge=bridge).start(open_browser=False)
+    viz = VizServer(
+        port=args.window_port,
+        bridge=bridge,
+        on_stop_speech=agent.tts.stop_speaking,
+    ).start(open_browser=False)
     agent.set_viz(viz)
     agent.set_bridge(bridge)
 

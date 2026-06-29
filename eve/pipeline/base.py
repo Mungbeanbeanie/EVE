@@ -42,3 +42,6 @@ class TTSEngine(ABC):
     @abstractmethod
     async def speak(self, text: str) -> None:
         """Synthesize `text` and play it through the speaker."""
+
+    def stop_speaking(self) -> None:
+        """Interrupt speech in progress. No-op if nothing is playing."""

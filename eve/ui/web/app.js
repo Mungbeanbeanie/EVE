@@ -87,6 +87,7 @@ class EveWindow {
       composeForm: document.getElementById('compose-form'),
       textInput: document.getElementById('text-input'),
       textSend: document.getElementById('text-send'),
+      stopButton: document.getElementById('stop-button'),
     };
   }
 
@@ -105,6 +106,9 @@ class EveWindow {
 
     // Type-to-EVE: submit a typed prompt to the agent (POST ./input).
     this.el.composeForm.addEventListener('submit', (e) => this.submitText(e));
+
+    // Stop button: interrupt speech immediately.
+    this.el.stopButton.addEventListener('click', () => this.stopSpeaking());
 
     this.el.chips.forEach((chip) =>
       chip.addEventListener('click', () => this.setAnim(chip.dataset.state))
@@ -162,6 +166,9 @@ class EveWindow {
     this.el.mute.classList.toggle('is-muted', this.muted);
     this.el.mute.textContent = this.muted ? 'Unmute' : 'Mute mic';
 
+    // stop button: only when speaking
+    this.el.stopButton.hidden = this.anim !== 'speaking';
+
     // preview chips
     this.el.chips.forEach((chip) =>
       chip.classList.toggle('is-active', chip.dataset.state === this.anim)
@@ -187,6 +194,11 @@ class EveWindow {
   requestListen() {
     this._postJSON('./control', { action: 'listen' });
     this.setAnim('listening');
+  }
+
+  // Interrupt EVE mid-sentence.
+  stopSpeaking() {
+    this._postJSON('./control', { action: 'stop_speech' });
   }
 
   // Submit a typed prompt to the agent. Clears + refocuses the field so the

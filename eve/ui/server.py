@@ -18,6 +18,7 @@ import logging
 import mimetypes
 import queue
 import threading
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -45,6 +46,7 @@ class VizServer:
         port: int = 8765,
         accent: str = "amber",
         bridge: "InputBridge | None" = None,
+        on_stop_speech: "Callable[[], None] | None" = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -52,6 +54,9 @@ class VizServer:
         # and mic button POST here and the agent consumes the events; when absent
         # those POSTs are simply rejected (the orb still works receive-only).
         self.bridge = bridge
+        # Called directly from the HTTP thread when the user hits Stop — bypasses
+        # the bridge so it fires even while the agent is blocked inside speak().
+        self.on_stop_speech = on_stop_speech
         self._state: dict[str, str] = {"state": "idle", "accent": accent}
         self._subscribers: set[queue.Queue[dict[str, str]]] = set()
         self._lock = threading.Lock()
@@ -172,11 +177,16 @@ def _make_handler(viz: VizServer) -> type[BaseHTTPRequestHandler]:
             self._send_no_content()
 
         def _handle_control(self) -> None:
-            """POST /control {"action": "listen"} → ask the agent to capture a turn."""
+            """POST /control {"action": "..."} → send a control signal to the agent."""
+            action = str(self._read_json().get("action", "")).strip()
+            if action == "stop_speech":
+                if viz.on_stop_speech is not None:
+                    viz.on_stop_speech()
+                self._send_no_content()
+                return
             if viz.bridge is None:
                 self.send_error(503, "No agent attached")
                 return
-            action = str(self._read_json().get("action", "")).strip()
             if action != "listen":
                 self.send_error(400, "Unknown action")
                 return

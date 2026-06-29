@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+import threading
 
 import pyttsx3
 
@@ -44,6 +45,7 @@ class MacSayTTS(TTSEngine):
 
     def __init__(self, config: Config) -> None:
         self.config = config
+        self._proc: asyncio.subprocess.Process | None = None
 
     async def speak(self, text: str) -> None:
         """Synthesize and play `text` by piping it to the macOS `say` binary."""
@@ -54,21 +56,28 @@ class MacSayTTS(TTSEngine):
         if voice:
             args += ["-v", voice]
         try:
-            proc = await asyncio.create_subprocess_exec(
+            self._proc = await asyncio.create_subprocess_exec(
                 *args,
                 text,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _, stderr = await proc.communicate()
-            if proc.returncode != 0:
+            _, stderr = await self._proc.communicate()
+            if self._proc.returncode not in (0, -15):  # -15 = SIGTERM from stop_speaking
                 log.warning(
                     "macOS `say` exited %s: %s",
-                    proc.returncode,
+                    self._proc.returncode,
                     stderr.decode("utf-8", "replace").strip(),
                 )
         except FileNotFoundError:  # `say` missing (non-macOS) — should not happen
             log.warning("macOS `say` not found; no speech produced for this turn.")
+        finally:
+            self._proc = None
+
+    def stop_speaking(self) -> None:
+        proc = self._proc
+        if proc is not None and proc.returncode is None:
+            proc.terminate()
 
 
 class Pyttsx3TTS(TTSEngine):
@@ -159,6 +168,7 @@ class ElevenLabsTTS(TTSEngine):
         self.fallback = fallback
         self._client = None  # lazy: only build the client / PyAudio on first use
         self._pa = None
+        self._stop_event = threading.Event()
 
     def _ensure_client(self) -> None:
         """Build the ElevenLabs client and PyAudio output once, on first use."""
@@ -172,6 +182,7 @@ class ElevenLabsTTS(TTSEngine):
 
     async def speak(self, text: str) -> None:
         """Stream `text` from ElevenLabs to the speaker; fall back on any error."""
+        self._stop_event.clear()
         try:
             await asyncio.to_thread(self._stream_blocking, text)
         except Exception as exc:  # network, quota, bad key, SDK missing, …
@@ -182,6 +193,11 @@ class ElevenLabsTTS(TTSEngine):
             )
             if self.fallback is not None:
                 await self.fallback.speak(text)
+
+    def stop_speaking(self) -> None:
+        self._stop_event.set()
+        if self.fallback is not None:
+            self.fallback.stop_speaking()
 
     def _stream_blocking(self, text: str) -> None:
         """Synthesize and play synchronously (run off the event loop in a thread)."""
@@ -199,6 +215,8 @@ class ElevenLabsTTS(TTSEngine):
         )
         try:
             for chunk in audio_stream:
+                if self._stop_event.is_set():
+                    break
                 if chunk:
                     stream.write(chunk)
         finally:
