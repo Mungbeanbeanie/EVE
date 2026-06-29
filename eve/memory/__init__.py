@@ -7,6 +7,7 @@
     EpisodicMemory    — durable "what happened when": timestamped events/interactions.
                         Vector + time recall.
 
-Procedural + episodic are persisted in Postgres/pgvector via mem0. The manager is
-the single façade the Agent uses: `recall(query)` to read, `remember(...)` to write.
+Procedural + episodic are persisted on disk via mem0 — a local FAISS vector index
+embedded with FastEmbed. The manager is the single façade the Agent uses:
+`recall(query)` to read, `remember(...)` to write.
 """

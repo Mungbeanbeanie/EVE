@@ -30,11 +30,12 @@ elevenlabs>=2.0,<3
 # Pretrained ONNX keyword models ("hey_jarvis", "alexa", …) run on CPU.
 openwakeword>=0.6
 
-# Memory — mem0 manages vector memory; backed by Postgres + pgvector
+# Memory — mem0 orchestrates embedding + vector search, over a FAISS index on disk
+# and FastEmbed (ONNX) embeddings that run in-process.
 mem0ai>=0.1.0
-groq>=1.0             # required when llm_provider=groq
-psycopg[binary,pool]>=3.1
-pgvector>=0.2.5
+faiss-cpu>=1.8       # local vector index, persisted to disk
+fastembed>=0.3       # in-process ONNX embeddings
+groq>=1.0            # required when llm_provider=groq
 numpy>=1.26
 
 # Tools — Google (Gmail / Calendar / Drive) + Tavily web search

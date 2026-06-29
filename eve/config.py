@@ -28,13 +28,19 @@ class Config(BaseSettings):
     llm_api_key: str | None = None
     llm_api_base: str | None = None  # for self-hosted / Ollama
 
-    # ── Embedder (separate from LLM — Anthropic has no embedding API) ────────
-    embedder_provider: str = "ollama"
-    embedder_model: str = "nomic-embed-text"
-    embedder_base_url: str = "http://localhost:11434"  # Ollama server URL
+    # ── Embedder (vectorizes memories; separate from the LLM) ────────────────
+    # FastEmbed (ONNX) runs in-process; the model is downloaded and cached on first
+    # run. `embedding_dims` must match the model's output size. List models + dims:
+    #   python -c "from fastembed import TextEmbedding as T; [print(m['model'], m['dim']) for m in T.list_supported_models()]"
+    embedder_provider: str = "fastembed"
+    embedder_model: str = "nomic-ai/nomic-embed-text-v1.5"
+    embedding_dims: int = 768  # output size of embedder_model; sizes the FAISS index
 
-    # ── Database (memory backend) ────────────────────────────────────────────
-    database_url: str = "postgresql://eve:eve@localhost:5432/eve"
+    # ── Memory store (on-disk FAISS index) ───────────────────────────────────
+    # Where long-term memory persists (the FAISS index + metadata). "~" is
+    # expanded and the directory is created on first use; delete its contents to
+    # wipe EVE's long-term memory.
+    memory_dir: str = "~/.eve/memory"
 
     # ── Speech-to-text ───────────────────────────────────────────────────────
     whisper_model: str = "base"

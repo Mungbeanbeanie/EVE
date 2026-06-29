@@ -1,8 +1,8 @@
 """Shared pytest fixtures.
 
-Enables asyncio tests and provides a Config that doesn't depend on a real `.env`,
-real keys, or a running database — the smoke tests only check that the skeleton
-wires together, not that any feature works.
+Enables asyncio tests and provides a Config that doesn't depend on a real `.env`
+or real keys — the smoke tests only check that the skeleton wires together, not
+that any feature works.
 """
 
 from __future__ import annotations
@@ -18,5 +18,4 @@ def config() -> Config:
     return Config(
         llm_provider="anthropic",
         llm_model="anthropic/claude-opus-4-8",
-        database_url="postgresql://eve:eve@localhost:5432/eve",
     )

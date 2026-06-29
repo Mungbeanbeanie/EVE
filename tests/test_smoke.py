@@ -2,14 +2,12 @@
 
 These don't hit real STT/LLM/audio. They check that classes construct, the registry
 and executor work, the LLM factory resolves a provider, and that the memory façade
-degrades gracefully (and writes non-blocking) when the backend DB is unreachable.
+degrades gracefully (and writes non-blocking) when the embedder backend can't load.
 """
 
 from __future__ import annotations
 
 import time
-
-import pytest
 
 from eve.llm.factory import build_llm
 from eve.llm.litellm_client import LiteLLMClient
@@ -97,14 +95,15 @@ async def test_executor_runs_a_tool():
     assert await executor.run("add", '{"a": 2, "b": 3}') == 5
 
 
-# Point at a closed port so these always exercise the degradation path (and never
-# touch / pollute a real DB), regardless of whether Postgres happens to be up.
-_UNREACHABLE_DB = "postgresql://eve:eve@localhost:59999/eve"
+# An unknown embedder model makes the mem0 backend raise as soon as it builds, so
+# these tests exercise the graceful-degradation path deterministically and without
+# touching EVE's real on-disk memory.
+_BAD_BACKEND = {"embedder_model": "does-not-exist/not-a-real-model"}
 
 
-async def test_recall_degrades_when_backend_unreachable(config):
-    """With no DB, recall must not crash — it falls back to working memory only."""
-    cfg = config.model_copy(update={"database_url": _UNREACHABLE_DB})
+async def test_recall_degrades_when_backend_unavailable(config):
+    """If the backend can't load, recall must not crash — it falls back to working memory."""
+    cfg = config.model_copy(update=_BAD_BACKEND)
     mem = MemoryManager.from_config(cfg)
     messages = await mem.recall("anything")
     # Always returns at least the system prompt from working memory.
@@ -112,13 +111,13 @@ async def test_recall_degrades_when_backend_unreachable(config):
     assert messages and messages[0]["role"] == "system"
 
 
-async def test_remember_degrades_when_backend_unreachable(config):
-    """With no DB, remember must not crash — working memory still records the turn."""
-    cfg = config.model_copy(update={"database_url": _UNREACHABLE_DB})
+async def test_remember_degrades_when_backend_unavailable(config):
+    """If the backend can't load, remember must not crash — working memory still records it."""
+    cfg = config.model_copy(update=_BAD_BACKEND)
     mem = MemoryManager.from_config(cfg)
     await mem.remember(user="hello", assistant="hi there")
     # Working memory updates synchronously, even though long-term persistence runs
-    # in the background and will fail (no DB).
+    # in the background and will fail (bad embedder model).
     snapshot = mem.working.snapshot()
     assert {"role": "assistant", "content": "hi there"} in snapshot
     # flush() awaits the (failing) background write without raising.
@@ -128,10 +127,10 @@ async def test_remember_degrades_when_backend_unreachable(config):
 async def test_remember_is_non_blocking(config):
     """remember() returns immediately; durable persistence happens in the background.
 
-    With an unreachable DB the background write blocks ~2s on the preflight
-    timeout — remember() itself must return far faster than that.
+    Even when the background write is doomed (bad embedder model), remember()
+    itself must return promptly rather than wait on the persistence attempt.
     """
-    cfg = config.model_copy(update={"database_url": _UNREACHABLE_DB})
+    cfg = config.model_copy(update=_BAD_BACKEND)
     mem = MemoryManager.from_config(cfg)
     start = time.perf_counter()
     await mem.remember(user="ping", assistant="pong")

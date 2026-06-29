@@ -43,7 +43,7 @@ class MemoryManager:
     @classmethod
     def from_config(cls, config: Config) -> "MemoryManager":
         """Build the manager and all three layers from config (real wiring)."""
-        backend = Mem0Backend(config)  # shared mem0/pgvector client (lazy)
+        backend = Mem0Backend(config)  # shared mem0 client: FAISS index + FastEmbed (lazy)
         return cls(
             working=WorkingMemory(),
             procedural=ProceduralMemory(backend),
@@ -54,7 +54,7 @@ class MemoryManager:
     async def recall(self, query: str) -> list[Message]:
         """Return the full message list for the LLM, with long-term memory blended in.
 
-        Long-term recall is best-effort: if the mem0 backend (Postgres/embedder) is
+        Long-term recall is best-effort: if the mem0 backend (embedder/index) is
         unavailable, we still return the live working window so the conversation
         keeps working instead of crashing the turn.
         """

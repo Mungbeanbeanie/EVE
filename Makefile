@@ -2,28 +2,24 @@
 #
 # Fastest path from a clean clone to a running agent:
 #   make setup        # venv + deps + .env
-#   make db           # Postgres+pgvector in Docker (optional; memory only)
 #   make run          # text-mode REPL
 #
 # Ship it:
-#   make package      # build the Docker image
 #   make dist         # versioned source tarball in dist/
 
 # ── Config ───────────────────────────────────────────────────────────────────
 VENV    := .venv
 PY      := $(VENV)/bin/python
 PIP     := $(VENV)/bin/pip
-IMAGE   := eve
 VERSION := $(shell sed -n 's/^__version__ = "\(.*\)"/\1/p' eve/__init__.py)
 
 # Voice stack is installed separately (needs system audio libs).
 VOICE_PKGS := faster-whisper webrtcvad pyttsx3 pyaudio
 
 .DEFAULT_GOAL := help
-.PHONY: help setup venv install install-voice install-window env db db-down \
-        db-logs ollama run text voice window window-voice test lint fmt \
-        docker-build package up down logs dist install-agent uninstall-agent \
-        clean clean-all
+.PHONY: help setup venv install install-voice install-window env \
+        run text voice window window-voice test lint fmt \
+        dist install-agent uninstall-agent clean clean-all
 
 # Native desktop window deps (macOS): menu-bar host + WKWebView bindings.
 WINDOW_PKGS := rumps pyobjc-framework-Cocoa pyobjc-framework-WebKit pywebview
@@ -37,7 +33,7 @@ help: ## Show this help
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup: venv install env ## One-shot: create venv, install deps, scaffold .env
-	@echo "✅ Setup complete. Next: 'make db' (optional) then 'make run'."
+	@echo "✅ Setup complete. Next: 'make run' (text), or 'make install-voice' then 'make voice'."
 
 venv: ## Create the virtualenv if missing
 	@test -d $(VENV) || python3 -m venv $(VENV)
@@ -54,19 +50,6 @@ install-window: venv ## Install the native menu-bar window deps (macOS)
 
 env: ## Create .env from .env.example if it doesn't exist
 	@test -f .env || (cp .env.example .env && echo "📝 Created .env — fill in LLM_MODEL + key.")
-
-# ── Services (Docker / Ollama) ───────────────────────────────────────────────
-db: ## Start Postgres+pgvector (memory backend) in the background
-	docker compose up -d db
-
-db-down: ## Stop the database container
-	docker compose stop db
-
-db-logs: ## Tail the database logs
-	docker compose logs -f db
-
-ollama: ## Pull the local embedding model used by memory
-	ollama pull nomic-embed-text
 
 # ── Run ──────────────────────────────────────────────────────────────────────
 run: text ## Alias for 'make text'
@@ -102,21 +85,6 @@ fmt: ## Auto-fix lint issues with ruff
 	@$(PY) -m ruff check --fix eve tests main.py
 
 # ── Packaging ────────────────────────────────────────────────────────────────
-docker-build: ## Build the Docker image (tagged eve:VERSION and eve:latest)
-	docker build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
-
-package: docker-build ## Build the shippable Docker image
-	@echo "📦 Built image $(IMAGE):$(VERSION) (also tagged :latest)."
-
-up: ## Run the full stack (app + db) via Docker Compose
-	docker compose up --build
-
-down: ## Stop and remove the Docker Compose stack
-	docker compose down
-
-logs: ## Tail all Docker Compose logs
-	docker compose logs -f
-
 dist: ## Build a versioned source tarball in dist/
 	@mkdir -p dist
 	@git archive --format=tar.gz --prefix=eve-$(VERSION)/ \
