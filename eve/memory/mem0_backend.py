@@ -41,6 +41,13 @@ logging.getLogger("mem0.memory.main").addFilter(_DropFaissKeywordWarning())
 
 COLLECTION = "eve"
 
+# mem0 builds a per-provider LLM config object, and each names its base-URL field
+# differently — Ollama wants ``ollama_base_url``, OpenAI-compatible providers want
+# ``openai_base_url``, and most others accept ``api_base``. Passing the wrong key
+# raises ``TypeError: ... unexpected keyword argument``, so we look up the right
+# one for the configured provider (falling back to ``api_base``).
+_BASE_URL_KEYS = {"ollama": "ollama_base_url", "openai": "openai_base_url"}
+
 
 class Mem0Backend:
     """Lazily-constructed, shared mem0 Memory instance (FAISS + FastEmbed)."""
@@ -77,7 +84,8 @@ class Mem0Backend:
         model = self._config.llm_model.split("/", 1)[-1]
         llm_cfg: dict = {"model": model, "api_key": self._config.llm_api_key}
         if self._config.llm_api_base:
-            llm_cfg["api_base"] = self._config.llm_api_base
+            base_url_key = _BASE_URL_KEYS.get(self._config.llm_provider, "api_base")
+            llm_cfg[base_url_key] = self._config.llm_api_base
 
         log.info("Loading memory: FAISS at %s, embedder %s", path, self._config.embedder_model)
         return Memory.from_config(

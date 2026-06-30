@@ -36,6 +36,11 @@ mem0ai>=0.1.0
 faiss-cpu>=1.8       # local vector index, persisted to disk
 fastembed>=0.3       # in-process ONNX embeddings
 groq>=1.0            # required when llm_provider=groq
+# mem0 reuses llm_provider for its fact-extraction step via its NATIVE client, so
+# llm_provider=ollama needs the `ollama` package here (the main chat path goes
+# through LiteLLM over HTTP and doesn't). Without it, long-term memory silently
+# disables itself and EVE forgets things between sessions.
+ollama>=0.3          # required when llm_provider=ollama
 numpy>=1.26
 
 # Tools — Google (Gmail / Calendar / Drive) + Tavily web search
