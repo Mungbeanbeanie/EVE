@@ -9,6 +9,10 @@ receives the update and drives the orb to match.
 State flows one way (agent → browser), which is exactly what SSE is for, so we
 avoid pulling in a WebSocket library. The server runs in a daemon thread and
 ``set_state`` is safe to call from the asyncio agent thread.
+
+Every queued SSE frame carries its own event name: persistent orb state rides the
+``state`` event (replayed to new connections), while transient reply captions ride
+the ``reply`` event (one-shot, never replayed). See :meth:`VizServer._broadcast`.
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ class VizServer:
         accent: str = "amber",
         bridge: "InputBridge | None" = None,
         on_stop_speech: "Callable[[], None] | None" = None,
+        on_stop_listen: "Callable[[], None] | None" = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -57,8 +62,14 @@ class VizServer:
         # Called directly from the HTTP thread when the user hits Stop — bypasses
         # the bridge so it fires even while the agent is blocked inside speak().
         self.on_stop_speech = on_stop_speech
+        # Called directly from the HTTP thread to end an in-progress mic capture
+        # (push-to-talk's second tap). Like on_stop_speech it bypasses the bridge:
+        # the agent is blocked inside record_utterance on the worker thread, so a
+        # bridge event would not be read until recording already ended.
+        self.on_stop_listen = on_stop_listen
         self._state: dict[str, str] = {"state": "idle", "accent": accent}
-        self._subscribers: set[queue.Queue[dict[str, str]]] = set()
+        # Queued frames carry their own SSE event name: {"event": <name>, "data": ...}.
+        self._subscribers: set[queue.Queue[dict]] = set()
         self._lock = threading.Lock()
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -101,24 +112,40 @@ class VizServer:
         """Push a new accent palette key (``amber / cyan / violet / mono``)."""
         self._update(accent=key)
 
+    def push_reply(self, role: str, text: str) -> None:
+        """Broadcast a one-way reply caption (``role`` is "you" or "eve").
+
+        TRANSIENT by design: unlike orb state this is *not* merged into
+        ``self._state``, so a browser that connects later does not replay a stale
+        line — it only ever sees captions that arrive while it is connected.
+        """
+        self._broadcast({"event": "reply", "data": {"role": role, "text": text}})
+
     def _update(self, **changes: str) -> None:
+        """Merge ``changes`` into the persistent state and broadcast a snapshot."""
         with self._lock:
             self._state = {**self._state, **changes}
             snapshot = dict(self._state)
+        self._broadcast({"event": "state", "data": snapshot})
+
+    def _broadcast(self, frame: dict) -> None:
+        """Fan one ``{"event", "data"}`` frame out to every subscriber queue."""
+        with self._lock:
             subscribers = list(self._subscribers)
         for q in subscribers:
             try:
-                q.put_nowait(snapshot)
+                q.put_nowait(frame)
             except queue.Full:  # pragma: no cover - unbounded queue
                 pass
 
     # ── subscriber registry (used by the SSE handler) ────────────────────────
-    def _subscribe(self) -> "tuple[queue.Queue[dict[str, str]], dict[str, str]]":
-        q: queue.Queue[dict[str, str]] = queue.Queue()
+    def _subscribe(self) -> "tuple[queue.Queue[dict], dict]":
+        """Register a new SSE client; return its queue and the initial state frame."""
+        q: queue.Queue[dict] = queue.Queue()
         with self._lock:
             self._subscribers.add(q)
             snapshot = dict(self._state)
-        return q, snapshot
+        return q, {"event": "state", "data": snapshot}
 
     def _unsubscribe(self, q: queue.Queue) -> None:
         with self._lock:
@@ -179,9 +206,17 @@ def _make_handler(viz: VizServer) -> type[BaseHTTPRequestHandler]:
         def _handle_control(self) -> None:
             """POST /control {"action": "..."} → send a control signal to the agent."""
             action = str(self._read_json().get("action", "")).strip()
+            # Stop actions are direct callbacks: they must fire from the HTTP thread
+            # even while the agent is blocked inside speak()/record_utterance(), so
+            # they bypass the bridge entirely (which the agent only drains at idle).
             if action == "stop_speech":
                 if viz.on_stop_speech is not None:
                     viz.on_stop_speech()
+                self._send_no_content()
+                return
+            if action == "stop_listen":
+                if viz.on_stop_listen is not None:
+                    viz.on_stop_listen()
                 self._send_no_content()
                 return
             if viz.bridge is None:
@@ -229,9 +264,9 @@ def _make_handler(viz: VizServer) -> type[BaseHTTPRequestHandler]:
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
 
-            q, snapshot = viz._subscribe()
+            q, initial = viz._subscribe()
             try:
-                self._send_event(snapshot)
+                self._send_event(initial)
                 while True:
                     try:
                         frame = q.get(timeout=_HEARTBEAT_SECONDS)
@@ -245,9 +280,10 @@ def _make_handler(viz: VizServer) -> type[BaseHTTPRequestHandler]:
             finally:
                 viz._unsubscribe(q)
 
-        def _send_event(self, payload: dict[str, str]) -> None:
-            data = json.dumps(payload)
-            self.wfile.write(f"event: state\ndata: {data}\n\n".encode("utf-8"))
+        def _send_event(self, frame: dict) -> None:
+            """Write one SSE frame, using the event name it carries."""
+            data = json.dumps(frame["data"])
+            self.wfile.write(f"event: {frame['event']}\ndata: {data}\n\n".encode("utf-8"))
             self.wfile.flush()
 
     return Handler

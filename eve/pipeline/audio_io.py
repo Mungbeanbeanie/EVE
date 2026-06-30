@@ -42,14 +42,32 @@ class PyAudioIO(AudioIO):
             sample_rate=SAMPLE_RATE,
         )
         self._pa = pyaudio.PyAudio()
+        # Set from another thread (the HTTP server) to cut an in-progress capture
+        # short for "tap again to stop" push-to-talk. See record_utterance.
+        self._stop_capture = threading.Event()
+
+    def stop_recording(self) -> None:
+        """End an in-progress :meth:`record_utterance` immediately.
+
+        Called from another thread (the HTTP server thread that handles the
+        "tap again to stop" tap) while the capture loop is blocked reading the mic
+        on the event loop's worker thread. Setting the event makes that loop break
+        and return what it has captured so far.
+        """
+        self._stop_capture.set()
 
     async def record_utterance(self) -> bytes:
         """Capture a single spoken utterance and return it as PCM bytes.
 
         Streams mic frames through the VAD, starting the buffer at the first
-        speech frame and ending it after a short run of trailing silence.
+        speech frame and ending it after a short run of trailing silence. A
+        concurrent :meth:`stop_recording` call ends the capture early and returns
+        whatever was spoken so far.
         """
         def record_blocking() -> bytes:
+            # Clear any stale stop left set by a prior turn so it can't immediately
+            # abort this fresh capture before the user has spoken.
+            self._stop_capture.clear()
             chunk = self.vad.frame_bytes() // 2  # samples per VAD frame
             stream = self._pa.open(
                 format=pyaudio.paInt16,
@@ -71,8 +89,14 @@ class PyAudioIO(AudioIO):
             speech_started = False
             silent_frames = 0
             voiced_frames = 0
+            stopped_manually = False
 
             while True:
+                # A concurrent stop_recording() tap ends the capture immediately,
+                # before reading another frame.
+                if self._stop_capture.is_set():
+                    stopped_manually = True
+                    break
                 # exception_on_overflow=False: if the input buffer overruns while
                 # we were busy (transcribing/speaking the previous turn), drop the
                 # late frames instead of crashing with OSError [-9981].
@@ -90,6 +114,11 @@ class PyAudioIO(AudioIO):
 
             stream.stop_stream()
             stream.close()
+
+            # A deliberate tap-to-send must never be discarded as noise: return
+            # whatever was captured even if it's below the min-speech floor.
+            if stopped_manually:
+                return b"".join(speech_frames)
 
             # Too little real speech → likely an echo/noise blip; report nothing so
             # the loop keeps listening instead of "hearing" a phantom utterance.

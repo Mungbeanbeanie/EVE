@@ -146,6 +146,17 @@ class Pyttsx3TTS(TTSEngine):
             self._engine.runAndWait()
         await asyncio.to_thread(_speak)
 
+    def stop_speaking(self) -> None:
+        """Interrupt speech in progress by stopping the pyttsx3 engine.
+
+        Overrides the base no-op so the Stop button works on every platform that
+        uses this engine. The engine is built lazily, so before the first ``speak``
+        there is nothing to stop — guard the ``None`` case rather than initializing
+        it just to halt silence.
+        """
+        if self._engine is not None:
+            self._engine.stop()
+
 
 class ElevenLabsTTS(TTSEngine):
     """Cloud TTS via ElevenLabs, streamed to the speaker as raw PCM.
@@ -166,25 +177,37 @@ class ElevenLabsTTS(TTSEngine):
     def __init__(self, config: Config, fallback: TTSEngine | None = None) -> None:
         self.config = config
         self.fallback = fallback
-        self._client = None  # lazy: only build the client / PyAudio on first use
-        self._pa = None
+        self._client = None  # lazy: only build the network client on first use
         self._stop_event = threading.Event()
 
     def _ensure_client(self) -> None:
-        """Build the ElevenLabs client and PyAudio output once, on first use."""
+        """Build the ElevenLabs network client once, on first use.
+
+        Only the *network* client is cached here. PyAudio is deliberately NOT
+        cached: a single ``pyaudio.PyAudio()`` snapshots the audio device list at
+        construction time, and under a launchd login auto-start that snapshot can
+        resolve a stale/wrong default output device — so audio is written
+        "successfully" to nothing. ``_stream_blocking`` builds a fresh PyAudio per
+        turn instead (see there).
+        """
         if self._client is not None:
             return
         from elevenlabs.client import ElevenLabs  # optional dep — import lazily
-        import pyaudio
 
         self._client = ElevenLabs(api_key=self.config.elevenlabs_api_key)
-        self._pa = pyaudio.PyAudio()
 
     async def speak(self, text: str) -> None:
-        """Stream `text` from ElevenLabs to the speaker; fall back on any error."""
+        """Stream `text` from ElevenLabs to the speaker; fall back on any error.
+
+        Two distinct failure modes both route to the local fallback so the turn is
+        never silent: a raised exception (network, quota, bad key, SDK missing) via
+        the broad ``except`` below, and a "successful" stream that produced zero
+        bytes (the silent-device case ``_stream_blocking`` can't itself fix because
+        it runs in a worker thread and the fallback is async).
+        """
         self._stop_event.clear()
         try:
-            await asyncio.to_thread(self._stream_blocking, text)
+            bytes_written = await asyncio.to_thread(self._stream_blocking, text)
         except Exception as exc:  # network, quota, bad key, SDK missing, …
             log.warning(
                 "ElevenLabs TTS failed (%s: %s); falling back to the local voice.",
@@ -193,14 +216,53 @@ class ElevenLabsTTS(TTSEngine):
             )
             if self.fallback is not None:
                 await self.fallback.speak(text)
+            return
+
+        # No audio reached the speaker (e.g. a stale launchd device snapshot wrote
+        # to nothing). Treat it like a failure and let the local engine speak.
+        if bytes_written == 0 and self.fallback is not None:
+            log.warning(
+                "ElevenLabs TTS produced no audio; falling back to the local voice."
+            )
+            await self.fallback.speak(text)
 
     def stop_speaking(self) -> None:
         self._stop_event.set()
         if self.fallback is not None:
             self.fallback.stop_speaking()
 
-    def _stream_blocking(self, text: str) -> None:
-        """Synthesize and play synchronously (run off the event loop in a thread)."""
+    def _open_output_stream(self, pa, pyaudio_module):
+        """Open a PyAudio output stream bound to the CURRENT default speaker.
+
+        We resolve the live default output device explicitly and pass its index to
+        ``open(output_device_index=...)`` instead of relying on PyAudio's implicit
+        default. Combined with the ``log.info`` of the device name + index, this
+        makes the otherwise-silent "writing to the wrong device" failure observable
+        in the logs and pins playback to the device that is actually default *now*.
+        """
+        device = pa.get_default_output_device_info()
+        index = int(device["index"])
+        log.info("ElevenLabs TTS output device: %s (index %s)", device["name"], index)
+        return pa.open(
+            format=pyaudio_module.paInt16,
+            channels=1,
+            rate=self.SAMPLE_RATE,
+            output=True,
+            output_device_index=index,
+        )
+
+    def _stream_blocking(self, text: str) -> int:
+        """Synthesize and play synchronously; return the total bytes written.
+
+        Runs off the event loop in a thread. A FRESH ``pyaudio.PyAudio()`` is built
+        (and terminated in ``finally``) for every call: a launchd login-time device
+        snapshot can point at the wrong/stale default device, and re-enumerating per
+        turn is cheap relative to the network TTS round-trip while guaranteeing the
+        live default — the built-in speakers — is used.
+
+        The returned byte count lets the async ``speak`` detect a zero-audio turn
+        (silent device) and fall back to the local engine.
+        """
         import pyaudio
 
         self._ensure_client()
@@ -210,18 +272,32 @@ class ElevenLabsTTS(TTSEngine):
             model_id=self.config.elevenlabs_model,
             output_format="pcm_16000",
         )
-        stream = self._pa.open(
-            format=pyaudio.paInt16, channels=1, rate=self.SAMPLE_RATE, output=True
-        )
+
+        pa = pyaudio.PyAudio()
+        bytes_written = 0
         try:
-            for chunk in audio_stream:
+            stream = self._open_output_stream(pa, pyaudio)
+            try:
+                for chunk in audio_stream:
+                    if self._stop_event.is_set():
+                        break
+                    if chunk:
+                        stream.write(chunk)
+                        bytes_written += len(chunk)
+            finally:
+                # On a user interrupt, abort() (PortAudio Pa_AbortStream) discards
+                # the already-buffered tail so Stop is instant; on normal completion
+                # stop_stream() drains the buffer so the last words play fully.
                 if self._stop_event.is_set():
-                    break
-                if chunk:
-                    stream.write(chunk)
+                    stream.abort()
+                else:
+                    stream.stop_stream()
+                stream.close()
         finally:
-            stream.stop_stream()
-            stream.close()
+            pa.terminate()
+
+        log.info("ElevenLabs TTS wrote %d bytes to the output device.", bytes_written)
+        return bytes_written
 
 
 def _build_local_tts(config: Config) -> TTSEngine:

@@ -78,6 +78,16 @@ class Agent:
         if self.viz is not None:
             self.viz.set_state(name)
 
+    def _push_reply(self, role: str, text: str) -> None:
+        """Show a turn caption in the window; a no-op when no window is attached.
+
+        Mirrors :meth:`_set_state`: the window renders these one-way captions
+        ("you"/"eve") so the conversation is legible on screen even though the
+        reply is also spoken. Headless runs (no viz) are unaffected.
+        """
+        if self.viz is not None:
+            self.viz.push_reply(role, text)
+
     # ── Construction ─────────────────────────────────────────────────────────
     @classmethod
     def from_config(cls, config: Config) -> "Agent":
@@ -221,6 +231,7 @@ class Agent:
         self._speak = speak
         try:
             text = sanitize(text)
+            self._push_reply("you", text)  # echo the user's turn as an on-screen caption
             self.memory.working.add_user(text)
 
             # Pull relevant procedural + episodic memories and merge with the
@@ -239,6 +250,7 @@ class Agent:
             await self.memory.remember(user=text, assistant=reply)
 
             self._set_state("speaking")  # orb swells while EVE replies
+            self._push_reply("eve", reply)  # caption the reply even though it's spoken
             if speak:
                 await self.tts.speak(reply)
             else:
@@ -247,11 +259,15 @@ class Agent:
         except NotImplementedError as exc:
             log.warning("Component not available → %s", exc)
             print(f"[EVE] {exc}")
+            # Surface a short, user-facing line in the window (the f-string above is
+            # developer detail for the terminal; the caption stays friendly).
+            self._push_reply("eve", "That feature isn't set up yet.")
         except Exception as exc:
             # One bad turn (network blip, tool error, runaway loop) must not kill the
             # session — log it, tell the user, and return to listening.
             log.exception("Turn failed")
             message = "Sorry, something went wrong handling that. Please try again."
+            self._push_reply("eve", message)  # show the same friendly line on screen
             if speak:
                 await self.tts.speak(message)
             else:

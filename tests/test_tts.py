@@ -73,3 +73,29 @@ async def test_elevenlabs_error_without_fallback_is_swallowed(config):
     tts._stream_blocking = _boom  # type: ignore[method-assign]
 
     await tts.speak("hello there")  # should simply return
+
+
+async def test_elevenlabs_falls_back_when_no_audio_written(config):
+    """A "successful" stream that played zero bytes (silent/wrong device) still
+    routes to the local fallback so the turn isn't lost."""
+    cfg = config.model_copy(update={"elevenlabs_api_key": "sk-test"})
+    fallback = _RecordingTTS()
+    tts = ElevenLabsTTS(cfg, fallback=fallback)
+
+    # Stream "succeeds" but reports no audio reached the speaker.
+    tts._stream_blocking = lambda _text: 0  # type: ignore[method-assign]
+
+    await tts.speak("hello there")
+    assert fallback.spoken == ["hello there"]
+
+
+async def test_elevenlabs_does_not_fall_back_when_audio_written(config):
+    """A normal turn that played audio must NOT double-speak via the fallback."""
+    cfg = config.model_copy(update={"elevenlabs_api_key": "sk-test"})
+    fallback = _RecordingTTS()
+    tts = ElevenLabsTTS(cfg, fallback=fallback)
+
+    tts._stream_blocking = lambda _text: 320  # type: ignore[method-assign]
+
+    await tts.speak("hello there")
+    assert fallback.spoken == []

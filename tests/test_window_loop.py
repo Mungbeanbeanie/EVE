@@ -26,13 +26,17 @@ class _RecordingTTS(TTSEngine):
 
 
 class _RecordingViz:
-    """Fake visualizer that records the orb states the agent pushes."""
+    """Fake visualizer that records the orb states and reply captions pushed."""
 
     def __init__(self) -> None:
         self.states: list[str] = []
+        self.replies: list[tuple[str, str]] = []  # (role, text) per push_reply
 
     def set_state(self, name: str) -> None:
         self.states.append(name)
+
+    def push_reply(self, role: str, text: str) -> None:
+        self.replies.append((role, text))
 
 
 class _FakeWorking:
@@ -116,6 +120,24 @@ async def test_window_text_turn_speaks_reply(config):
     assert viz.states == ["idle", "thinking", "speaking", "idle"]
 
 
+async def test_window_turn_captions_both_sides(config):
+    """A turn pushes the user's line and EVE's reply as on-screen captions.
+
+    The reply caption must fire even though the reply is also spoken, so the
+    window stays legible — see Agent._push_reply.
+    """
+    agent, _tts, viz = _build_agent(config, llm_reply="Hi there!")
+    bridge = InputBridge()
+    agent.set_bridge(bridge)
+
+    bridge.submit_text("hello eve")
+    bridge.stop()
+    await agent.run_window()
+
+    # In order: echo the (sanitized) user turn, then EVE's reply.
+    assert viz.replies == [("you", "hello eve"), ("eve", "Hi there!")]
+
+
 async def test_window_listen_turn_transcribes_and_speaks(config):
     """A mic 'listen' control captures, transcribes, and speaks the reply."""
     agent, tts, viz = _build_agent(config, llm_reply="Hello!", stt_text="hello eve")
@@ -152,3 +174,31 @@ async def test_window_requires_bridge(config):
         raise AssertionError("expected RuntimeError")
     except RuntimeError as exc:
         assert "bridge" in str(exc)
+
+
+class _BoomLLM:
+    """Fake LLM that always blows up, to exercise the turn's error path."""
+
+    async def respond(self, *, messages, tools, executor) -> str:
+        raise RuntimeError("kaboom")
+
+
+async def test_window_turn_failure_captions_friendly_message(config):
+    """A failed turn still captions the user echo plus a friendly error line.
+
+    The session must survive a bad turn (no crash) and the window must show the
+    same friendly message that's spoken — see Agent._handle_turn's except block.
+    """
+    agent, tts, viz = _build_agent(config)
+    agent.llm = _BoomLLM()
+    bridge = InputBridge()
+    agent.set_bridge(bridge)
+
+    bridge.submit_text("hello eve")
+    bridge.stop()
+    await agent.run_window()
+
+    assert viz.replies[0] == ("you", "hello eve")  # user echo still happens
+    role, text = viz.replies[1]
+    assert role == "eve" and "something went wrong" in text
+    assert tts.spoken == [text]  # the spoken line matches the caption

@@ -87,8 +87,11 @@ class LiteLLMClient(LLMClient):
                     model=self.model,
                     messages=messages,
                     tools=tools,
-                    api_key=self.api_key,
-                    api_base=self.api_base,
+                    # Coerce blank config to None: an empty string would make
+                    # LiteLLM emit an `Authorization: Bearer ` header, which
+                    # keyless local providers (e.g. Ollama) reject outright.
+                    api_key=self.api_key or None,
+                    api_base=self.api_base or None,
                 )
             except Exception as exc:
                 if not self._is_tool_format_error(exc):

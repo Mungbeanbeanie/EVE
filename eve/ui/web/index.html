@@ -48,7 +48,7 @@
         <!-- Push-to-talk button (PTT mode) -->
         <button class="eve-ptt" id="ptt-button" hidden>
           <span class="eve-ptt__dot"></span>
-          <span class="eve-ptt__label" id="ptt-label">Hold to talk</span>
+          <span class="eve-ptt__label" id="ptt-label">Tap to talk</span>
         </button>
 
         <!-- Always-on controls -->
@@ -56,6 +56,10 @@
           <button class="eve-mute" id="mute-button">Mute mic</button>
           <button class="eve-demo" id="demo-button">Demo reply</button>
         </div>
+
+        <!-- Reply transcript: a short rolling caption of the latest exchange.
+             Filled live from SSE `reply` events ({role, text}) by app.js. -->
+        <div class="eve-reply-log" id="reply-log" aria-live="polite" aria-label="Conversation transcript"></div>
 
         <!-- Type-to-EVE: real browser→backend input channel (POST ./input).
              Visible in both standalone and embedded modes. -->

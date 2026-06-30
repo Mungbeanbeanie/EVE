@@ -79,6 +79,10 @@ def run_with_window(agent: Agent, args: argparse.Namespace) -> None:
         port=args.window_port,
         bridge=bridge,
         on_stop_speech=agent.tts.stop_speaking,
+        # Second push-to-talk tap → end the in-progress mic capture directly from
+        # the HTTP thread (the agent is blocked inside record_utterance and can't
+        # read a bridge event until recording already ended).
+        on_stop_listen=agent.audio.stop_recording,
     ).start(open_browser=False)
     agent.set_viz(viz)
     agent.set_bridge(bridge)

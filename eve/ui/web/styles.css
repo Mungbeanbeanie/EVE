@@ -275,6 +275,38 @@ html, body {
   border: none;
 }
 
+/* ---- Reply transcript (rolling caption of the latest exchange) ---- */
+.eve-reply-log {
+  margin-top: 11px;
+  padding: 10px 12px;
+  max-height: 132px;            /* ~6 short lines; clip the rest gracefully */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+/* Empty until the first reply arrives — collapse so it leaves no gap. */
+.eve-reply-log:empty { display: none; }
+
+/* One line per turn. Role label is dimmed; the text reads in full color. */
+.eve-reply-log__line { word-break: break-word; }
+.eve-reply-log__role {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-right: 6px;
+  color: var(--color-text-faint);
+}
+/* Subtly distinguish who is speaking: EVE picks up the accent, you stay neutral. */
+.eve-reply-log__line--eve .eve-reply-log__role { color: var(--accent-hex); }
+.eve-reply-log__line--eve { color: var(--color-text); }
+.eve-reply-log__line--you { color: var(--color-text-muted); }
+
 /* ---- Compose row (type-to-EVE) ---- */
 .eve-compose {
   display: flex;

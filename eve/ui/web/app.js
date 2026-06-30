@@ -88,6 +88,7 @@ class EveWindow {
       textInput: document.getElementById('text-input'),
       textSend: document.getElementById('text-send'),
       stopButton: document.getElementById('stop-button'),
+      replyLog: document.getElementById('reply-log'),
     };
   }
 
@@ -95,11 +96,12 @@ class EveWindow {
     this.el.segPtt.addEventListener('click', () => this.setMode('ptt'));
     this.el.segAlways.addEventListener('click', () => this.setMode('always'));
 
-    // Push-to-talk → real server-side capture. The Python server does its own
-    // VAD-segmented capture, so a single tap is enough (no press-and-hold).
-    // The authoritative orb state still arrives over SSE; this only kicks off
-    // capture and shows a brief local "Listening…" affordance for responsiveness.
-    this.el.ptt.addEventListener('click', () => this.requestListen());
+    // Push-to-talk → tap-to-start / tap-to-send toggle. The Python server does
+    // its own VAD-segmented capture (auto-stops on silence), so the first tap
+    // just starts it. A second tap ends capture immediately and submits. The
+    // authoritative orb state always arrives over SSE; the start tap shows a
+    // brief local "Listening…" affordance for responsiveness.
+    this.el.ptt.addEventListener('click', () => this.togglePtt());
 
     this.el.mute.addEventListener('click', () => this.toggleMute());
     this.el.demo.addEventListener('click', () => { this._ensureMic(); this.demoReply(); });
@@ -160,7 +162,8 @@ class EveWindow {
     // or by the brief local pending affordance after a tap).
     const held = this.mode === 'ptt' && this.anim === 'listening';
     this.el.ptt.classList.toggle('is-held', held);
-    this.el.pttLabel.textContent = held ? 'Listening…' : 'Tap to talk';
+    // While listening, a second tap sends — so the label advertises that.
+    this.el.pttLabel.textContent = held ? 'Tap to send' : 'Tap to talk';
 
     // mute appearance
     this.el.mute.classList.toggle('is-muted', this.muted);
@@ -194,6 +197,21 @@ class EveWindow {
   requestListen() {
     this._postJSON('./control', { action: 'listen' });
     this.setAnim('listening');
+  }
+
+  // PTT toggle: one tap starts capture, a second tap (while listening) ends it
+  // and submits. We key off `this.anim === 'listening'` — the same state the
+  // SSE stream drives — so the button stays in sync with the real pipeline.
+  togglePtt() {
+    if (this.anim === 'listening') this.stopListening();
+    else this.requestListen();
+  }
+
+  // End the in-progress capture immediately and submit it. We do NOT force a
+  // local anim change here — the backend will transcribe/answer and the SSE
+  // stream drives the next state (thinking → speaking), so the orb stays honest.
+  stopListening() {
+    this._postJSON('./control', { action: 'stop_listen' });
   }
 
   // Interrupt EVE mid-sentence.
@@ -290,7 +308,40 @@ class EveWindow {
         /* ignore malformed frames */
       }
     });
+    // `reply` frames carry the transcript text: { role: 'you' | 'eve', text }.
+    es.addEventListener('reply', (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data && data.role && typeof data.text === 'string') {
+          this._appendReply(data.role, data.text);
+        }
+      } catch {
+        /* ignore malformed frames */
+      }
+    });
     es.onerror = () => { /* EventSource auto-reconnects; nothing to do */ };
+  }
+
+  // ---- reply transcript ----------------------------------------------------
+  // Append one line to the rolling caption, keep only the last few entries, and
+  // scroll the newest into view. `role` is 'you' or 'eve' (drives subtle styling).
+  _appendReply(role, text) {
+    const log = this.el.replyLog;
+    if (!log) return;
+
+    const line = document.createElement('div');
+    line.className = `eve-reply-log__line eve-reply-log__line--${role === 'eve' ? 'eve' : 'you'}`;
+    const tag = document.createElement('span');
+    tag.className = 'eve-reply-log__role';
+    tag.textContent = role === 'eve' ? 'EVE' : 'You';
+    line.append(tag, document.createTextNode(text));
+    log.append(line);
+
+    // Cap to the last ~6 turns so the panel never grows unbounded.
+    while (log.childElementCount > 6) log.firstElementChild.remove();
+
+    // Auto-scroll to the newest line.
+    log.scrollTop = log.scrollHeight;
   }
 }
 
