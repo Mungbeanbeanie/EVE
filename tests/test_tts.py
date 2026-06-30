@@ -99,3 +99,37 @@ async def test_elevenlabs_does_not_fall_back_when_audio_written(config):
 
     await tts.speak("hello there")
     assert fallback.spoken == []
+
+
+async def test_stop_suppresses_zero_byte_fallback(config):
+    """A user Stop aborts mid-stream (few/zero bytes) — it must NOT hand off to the
+    local voice, or the robotic fallback reads the whole reply after Stop."""
+    cfg = config.model_copy(update={"elevenlabs_api_key": "sk-test"})
+    fallback = _RecordingTTS()
+    tts = ElevenLabsTTS(cfg, fallback=fallback)
+
+    # Simulate a turn the user stopped: the stream reports zero audio written.
+    def _stopped_stream(_text: str) -> int:
+        tts._stop_event.set()  # as stop_speaking() would have done
+        return 0
+
+    tts._stream_blocking = _stopped_stream  # type: ignore[method-assign]
+
+    await tts.speak("hello there")
+    assert fallback.spoken == []  # silence is what Stop asked for
+
+
+async def test_stop_suppresses_error_fallback(config):
+    """If the abort surfaces as an exception, a stopped turn still stays silent."""
+    cfg = config.model_copy(update={"elevenlabs_api_key": "sk-test"})
+    fallback = _RecordingTTS()
+    tts = ElevenLabsTTS(cfg, fallback=fallback)
+
+    def _stopped_boom(_text: str) -> None:
+        tts._stop_event.set()
+        raise RuntimeError("stream aborted")
+
+    tts._stream_blocking = _stopped_boom  # type: ignore[method-assign]
+
+    await tts.speak("hello there")
+    assert fallback.spoken == []

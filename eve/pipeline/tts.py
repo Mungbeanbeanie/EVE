@@ -46,22 +46,31 @@ class MacSayTTS(TTSEngine):
     def __init__(self, config: Config) -> None:
         self.config = config
         self._proc: asyncio.subprocess.Process | None = None
+        # Set by stop_speaking(). Closes the start race: a Stop that arrives just
+        # before or during `say`'s launch (when there is no process to terminate
+        # yet) still suppresses it, so a stopped turn can never start speaking.
+        self._stopped = threading.Event()
 
     async def speak(self, text: str) -> None:
         """Synthesize and play `text` by piping it to the macOS `say` binary."""
         if not text.strip():
             return
+        self._stopped.clear()  # fresh turn — forget any earlier Stop
         args = ["say"]
         voice = (self.config.tts_voice or "").strip()
         if voice:
             args += ["-v", voice]
         try:
+            if self._stopped.is_set():  # Stop landed before launch → stay silent
+                return
             self._proc = await asyncio.create_subprocess_exec(
                 *args,
                 text,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
             )
+            if self._stopped.is_set():  # Stop landed during launch → kill at once
+                self._proc.terminate()
             _, stderr = await self._proc.communicate()
             if self._proc.returncode not in (0, -15):  # -15 = SIGTERM from stop_speaking
                 log.warning(
@@ -75,6 +84,7 @@ class MacSayTTS(TTSEngine):
             self._proc = None
 
     def stop_speaking(self) -> None:
+        self._stopped.set()  # block a not-yet-launched `say` (see speak())
         proc = self._proc
         if proc is not None and proc.returncode is None:
             proc.terminate()
@@ -209,6 +219,12 @@ class ElevenLabsTTS(TTSEngine):
         try:
             bytes_written = await asyncio.to_thread(self._stream_blocking, text)
         except Exception as exc:  # network, quota, bad key, SDK missing, …
+            # A user Stop aborts the stream mid-flight; that surfaces here as an
+            # exception (or a partial read), but it is NOT a failure to recover
+            # from. Never start the local voice in response to a deliberate Stop —
+            # that is exactly the "robotic voice keeps talking after Stop" bug.
+            if self._stop_event.is_set():
+                return
             log.warning(
                 "ElevenLabs TTS failed (%s: %s); falling back to the local voice.",
                 type(exc).__name__,
@@ -219,8 +235,14 @@ class ElevenLabsTTS(TTSEngine):
             return
 
         # No audio reached the speaker (e.g. a stale launchd device snapshot wrote
-        # to nothing). Treat it like a failure and let the local engine speak.
-        if bytes_written == 0 and self.fallback is not None:
+        # to nothing). Treat it like a failure and let the local engine speak —
+        # unless the user pressed Stop, in which case silence is what they asked
+        # for (a stopped turn writes few/zero bytes and must stay quiet).
+        if (
+            bytes_written == 0
+            and self.fallback is not None
+            and not self._stop_event.is_set()
+        ):
             log.warning(
                 "ElevenLabs TTS produced no audio; falling back to the local voice."
             )
