@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from pathlib import Path
 
 # Opt out of mem0's anonymous usage telemetry (PostHog) before importing it.
@@ -56,6 +57,10 @@ class Mem0Backend:
         self._config = config
         self._memory: Memory | None = None  # lazy: don't load the model until first use
         self._failed = False  # cached: skip retries once we know init failed
+        # Both the agent and the self-improvement thread (sleep-time reflection)
+        # may trigger the first build; the lock guarantees ONE FAISS index client
+        # rather than two racing writers over the same files.
+        self._build_lock = threading.Lock()
 
     def client(self) -> Memory:
         """Return the shared mem0 Memory client, building it on first call.
@@ -63,17 +68,18 @@ class Mem0Backend:
         The first ever call loads the FastEmbed model (downloaded and cached under
         ~/.cache the very first time) and opens/creates the FAISS index on disk.
         """
-        if self._memory is not None:
-            return self._memory
-        if self._failed:
-            raise RuntimeError("memory backend failed to initialize earlier; skipping")
+        with self._build_lock:
+            if self._memory is not None:
+                return self._memory
+            if self._failed:
+                raise RuntimeError("memory backend failed to initialize earlier; skipping")
 
-        try:
-            self._memory = self._build()
-        except Exception:
-            self._failed = True
-            raise
-        return self._memory
+            try:
+                self._memory = self._build()
+            except Exception:
+                self._failed = True
+                raise
+            return self._memory
 
     def _build(self) -> Memory:
         path = Path(self._config.memory_dir).expanduser()

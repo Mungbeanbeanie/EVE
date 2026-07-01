@@ -51,6 +51,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="show a Dock icon (default: menu-bar only, no Dock icon)",
     )
+    parser.add_argument(
+        "--improve",
+        action="store_true",
+        help="enable the sleep-time self-improvement loop (same as SELF_IMPROVE=true)",
+    )
     return parser.parse_args()
 
 
@@ -118,6 +123,9 @@ def run_with_window(agent: Agent, args: argparse.Namespace) -> None:
 def main() -> None:
     args = parse_args()
     config = load_config()
+    if args.improve:
+        # CLI wins over .env for this one flag — handy for one-off improve runs.
+        config = config.model_copy(update={"self_improve": True})
     setup_logging(config.log_level)
 
     # Agent.from_config wires the pipeline, memory layers, tools, and LLM client

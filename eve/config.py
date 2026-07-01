@@ -81,6 +81,20 @@ class Config(BaseSettings):
     # tool is registered unconditionally; it only errors if called without a key.
     tavily_api_key: str | None = None
 
+    # ── Self-improvement loop (sleep-time compute) ───────────────────────────
+    # When enabled, EVE uses idle time (no conversation for improve_idle_seconds)
+    # to run a heavier local model that researches, implements, and test-gates
+    # small improvements to EVE's own codebase — always inside a sandbox worktree
+    # on a `self-improve/*` branch (never main), never touching memory_dir.
+    # Cycles are journaled under improve_home/journal. See eve/improve/.
+    self_improve: bool = False
+    improve_model: str = "ollama_chat/ornith:35b"  # heavy model for idle work
+    improve_idle_seconds: float = 180.0  # user must be away this long to start
+    improve_max_files: int = 10          # per-cycle changed-file budget
+    improve_max_cycles: int = 0          # per-session cycle cap (0 = unlimited)
+    improve_home: str = "~/.eve/improve" # journal, state, sandbox worktrees
+    improve_reflect_hours: float = 6.0   # min gap between memory reflections (0 = off)
+
     # ── Misc ─────────────────────────────────────────────────────────────────
     log_level: str = "INFO"
 

@@ -12,6 +12,7 @@ import logging
 import re
 
 from eve.config import Config
+from eve.improve.activity import ActivityMonitor
 from eve.llm.factory import build_llm
 from eve.llm.sanitize import sanitize
 from eve.memory.manager import MemoryManager
@@ -19,6 +20,7 @@ from eve.pipeline.audio_io import PyAudioIO
 from eve.pipeline.base import TTSEngine
 from eve.pipeline.stt import WhisperSTT
 from eve.pipeline.tts import build_tts
+from eve.tools.base import Tool
 from eve.tools.executor import ToolExecutor
 from eve.tools.registry import ToolRegistry
 from eve.tools.adapters.google import GoogleAdapter
@@ -63,6 +65,24 @@ class Agent:
         # Optional browser → agent input channel (the window's text box + mic
         # button). Set in window mode; drives run_window() instead of stdin/mic.
         self.bridge = None
+        # Idle clock + (optional) sleep-time self-improvement daemon. The monitor
+        # always exists (it's just a timestamp); the loop only runs when enabled.
+        self.activity = ActivityMonitor()
+        self.improver = None  # eve.improve.SelfImprovementLoop when self_improve is on
+        if config.self_improve:
+            self.tools.register(
+                Tool(
+                    name="self_improvement_status",
+                    description=(
+                        "Report on EVE's own self-improvement loop: what it is doing "
+                        "right now, which sandbox branch it is working on, and the "
+                        "most recent improvement cycles from its journal. Use this "
+                        "when the user asks what you've been improving or learning."
+                    ),
+                    parameters={"type": "object", "properties": {}},
+                    handler=self._improvement_status,
+                )
+            )
 
     # ── Visualizer ────────────────────────────────────────────────────────────
     def set_viz(self, viz) -> None:
@@ -127,6 +147,23 @@ class Agent:
         """Run the agent in the requested mode until interrupted."""
         self._running = True
         log.info("EVE starting in %s mode (model=%s)", mode, self.config.llm_model)
+        if self.config.self_improve:
+            # Sleep-time compute: a heavier local model improves EVE's codebase
+            # while the user is away. Runs on a daemon thread with its own event
+            # loop so long generations never block conversation or shutdown.
+            from eve.improve.loop import SelfImprovementLoop
+
+            self.improver = SelfImprovementLoop(
+                config=self.config,
+                activity=self.activity,
+                memory=self.memory,
+                web_search=self._find_web_search(),
+            )
+            self.improver.start_in_thread()
+            log.info(
+                "Self-improvement on: %s after %.0fs idle",
+                self.config.improve_model, self.config.improve_idle_seconds,
+            )
         try:
             if mode == "window":
                 await self.run_window()
@@ -135,9 +172,24 @@ class Agent:
             else:
                 await self.run_text()
         finally:
+            if self.improver is not None:
+                self.improver.stop()
             # remember() persists long-term memory in the background; make sure any
             # in-flight writes finish before the event loop tears down.
             await self.memory.flush()
+
+    def _find_web_search(self):
+        """Hand the improvement loop EVE's existing web_search tool, if registered."""
+        try:
+            return self.tools.get("web_search").handler
+        except KeyError:
+            return None
+
+    async def _improvement_status(self) -> dict:
+        """Tool handler: let the chat model narrate the self-improvement loop."""
+        if self.improver is None:
+            return {"enabled": False, "note": "the self-improvement loop is not running"}
+        return self.improver.status()
 
     async def run_voice(self) -> None:
         """Voice loop: Mic -> STT -> sanitize -> LLM -> TTS -> Speaker.
@@ -229,53 +281,56 @@ class Agent:
         # (triggered by the LLM calling a destructive tool) reaches the user the same
         # way they're talking to EVE.
         self._speak = speak
-        try:
-            text = sanitize(text)
-            self._push_reply("you", text)  # echo the user's turn as an on-screen caption
-            self.memory.working.add_user(text)
+        # The interaction span keeps the idle clock at zero for the whole turn, so
+        # the self-improvement loop can never wake up mid-conversation.
+        with self.activity.interaction():
+            try:
+                text = sanitize(text)
+                self._push_reply("you", text)  # echo the user's turn as an on-screen caption
+                self.memory.working.add_user(text)
 
-            # Pull relevant procedural + episodic memories and merge with the
-            # live working window into the message list the LLM will see.
-            context = await self.memory.recall(text)
+                # Pull relevant procedural + episodic memories and merge with the
+                # live working window into the message list the LLM will see.
+                context = await self.memory.recall(text)
 
-            # The LLM client runs the tool-use loop internally, calling back into
-            # self.executor when the model requests a tool.
-            self._set_state("thinking")  # orb pulses while the model works
-            reply = await self.llm.respond(
-                messages=context,
-                tools=self.tools.specs(),
-                executor=self.executor,
-            )
+                # The LLM client runs the tool-use loop internally, calling back into
+                # self.executor when the model requests a tool.
+                self._set_state("thinking")  # orb pulses while the model works
+                reply = await self.llm.respond(
+                    messages=context,
+                    tools=self.tools.specs(),
+                    executor=self.executor,
+                )
 
-            await self.memory.remember(user=text, assistant=reply)
+                await self.memory.remember(user=text, assistant=reply)
 
-            self._set_state("speaking")  # orb swells while EVE replies
-            self._push_reply("eve", reply)  # caption the reply even though it's spoken
-            if speak:
-                await self.tts.speak(reply)
-            else:
-                print(f"eve > {reply}")
+                self._set_state("speaking")  # orb swells while EVE replies
+                self._push_reply("eve", reply)  # caption the reply even though it's spoken
+                if speak:
+                    await self.tts.speak(reply)
+                else:
+                    print(f"eve > {reply}")
 
-        except NotImplementedError as exc:
-            log.warning("Component not available → %s", exc)
-            print(f"[EVE] {exc}")
-            # Surface a short, user-facing line in the window (the f-string above is
-            # developer detail for the terminal; the caption stays friendly).
-            self._push_reply("eve", "That feature isn't set up yet.")
-        except Exception as exc:
-            # One bad turn (network blip, tool error, runaway loop) must not kill the
-            # session — log it, tell the user, and return to listening.
-            log.exception("Turn failed")
-            message = "Sorry, something went wrong handling that. Please try again."
-            self._push_reply("eve", message)  # show the same friendly line on screen
-            if speak:
-                await self.tts.speak(message)
-            else:
-                print(f"eve > {message}  ({type(exc).__name__}: {exc})")
-        finally:
-            # Turn over → orb rests. The voice loop flips back to "listening" on
-            # its next iteration; text mode simply waits at idle for the next line.
-            self._set_state("idle")
+            except NotImplementedError as exc:
+                log.warning("Component not available → %s", exc)
+                print(f"[EVE] {exc}")
+                # Surface a short, user-facing line in the window (the f-string above is
+                # developer detail for the terminal; the caption stays friendly).
+                self._push_reply("eve", "That feature isn't set up yet.")
+            except Exception as exc:
+                # One bad turn (network blip, tool error, runaway loop) must not kill the
+                # session — log it, tell the user, and return to listening.
+                log.exception("Turn failed")
+                message = "Sorry, something went wrong handling that. Please try again."
+                self._push_reply("eve", message)  # show the same friendly line on screen
+                if speak:
+                    await self.tts.speak(message)
+                else:
+                    print(f"eve > {message}  ({type(exc).__name__}: {exc})")
+            finally:
+                # Turn over → orb rests. The voice loop flips back to "listening" on
+                # its next iteration; text mode simply waits at idle for the next line.
+                self._set_state("idle")
 
     # ── Destructive-action confirmation ───────────────────────────────────────
     # Word-level matches (not substrings) so "now"/"know" don't read as "no".

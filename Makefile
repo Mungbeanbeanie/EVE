@@ -18,7 +18,7 @@ VOICE_PKGS := faster-whisper webrtcvad pyttsx3 pyaudio
 
 .DEFAULT_GOAL := help
 .PHONY: help setup venv install install-voice install-window env \
-        run text voice window window-voice test lint fmt \
+        run text voice window window-voice improve improve-status test lint fmt \
         dist install-agent uninstall-agent clean clean-all
 
 # Native desktop window deps (macOS): menu-bar host + WKWebView bindings.
@@ -66,6 +66,15 @@ window: ## Preview the EVE visualizer window standalone (no agent, opens browser
 
 window-voice: ## Run voice mode with the native menu-bar window attached
 	@$(PY) main.py --mode voice --window
+
+# ── Self-improvement (sleep-time compute) ─────────────────────────────────────
+improve: ## Run EVE (text mode) with the self-improvement loop enabled
+	@$(PY) main.py --mode text --improve
+
+improve-status: ## Show the self-improvement journal and sandbox branches
+	@cat ~/.eve/improve/journal/JOURNAL.md 2>/dev/null || echo "(no journal yet)"
+	@echo "── branches ──"
+	@git branch --list 'self-improve/*'
 
 # ── Always-on (launchd LaunchAgent) ──────────────────────────────────────────
 install-agent: ## Install EVE as a login agent (always-on, auto-restart)

@@ -232,3 +232,97 @@ eve/ui/
 
 ---
 
+## Self-improvement loop (sleep-time compute, optional)
+
+While you're away, EVE can put the idle machine to work on itself: a heavier
+local model researches, implements, and test-gates small improvements to EVE's
+own codebase, and consolidates conversational memory. When you come back, the
+loop yields instantly — conversation always runs on your (lighter) chat model.
+
+The design borrows from published work on self-improving agents:
+
+- **Sleep-time compute** ([Letta](https://www.letta.com/blog/sleep-time-compute/)):
+  a heavy model works offline during idle time; a light model handles live chat.
+- **Test-gated self-editing** ([SICA](https://github.com/MaximeRobeyns/self_improving_coding_agent),
+  ICLR '25): an agent edits its own codebase, keeping only changes that pass its
+  test gate.
+- **Sandbox + traceability** ([Darwin Gödel Machine](https://sakana.ai/dgm/)):
+  self-modification happens in isolation, every change is archived, and a human
+  supervises what actually ships.
+- **Reflection** ([Generative Agents](https://arxiv.org/abs/2304.03442)): idle-time
+  distillation of episodic memories into durable insights.
+
+### Enable it
+
+```bash
+ollama pull ornith:35b        # or any strong local coding model with tool support
+```
+
+```env
+SELF_IMPROVE=true
+IMPROVE_MODEL=ollama_chat/ornith:35b
+IMPROVE_IDLE_SECONDS=180      # how long you must be away before a cycle starts
+```
+
+```bash
+make improve                  # text mode with the loop on (or add --improve to any run)
+make improve-status           # journal + sandbox branches at a glance
+```
+
+Ask EVE *"what have you been improving?"* in any conversation — the
+`self_improvement_status` tool reads the loop's live state and journal.
+
+### One cycle
+
+```
+reflect (occasionally) → research → implement → verify (pytest) → review → commit
+```
+
+Three subagents run on `IMPROVE_MODEL` with role-scoped tools: a **researcher**
+(web search + read-only code access) turns the cycle's focus area — memory,
+architecture, code quality, tests, docs, performance, rotating — into concrete
+ideas; an **engineer** (guardrailed file tools + pytest) implements exactly one
+idea; a **reviewer** (read-only) judges the diff. The full test suite must pass
+— mechanically, not on the model's word — before anything is committed.
+Occasionally the loop also "reflects": it distills recent episodic memories
+into durable procedural insights (strictly additive — it can only `add`).
+
+### Safety rails (mechanical, not prompt-level)
+
+- **Never main.** All work happens in a git-worktree sandbox under
+  `IMPROVE_HOME/worktrees/`, committed to a `self-improve/<timestamp>` branch.
+  The commit path re-checks the branch name every time; there is no push.
+- **Memory is never wiped.** `MEMORY_DIR` must live outside the sandbox (file
+  tools physically can't reach it), and any diff that *adds* deletion code
+  (`rmtree`, `os.remove`, …) is rejected before commit.
+- **Bounded blast radius.** Per-cycle file budget (`IMPROVE_MAX_FILES`),
+  protected paths (`.env`, `.secrets`, `.git`, the guardrails module itself),
+  and a per-session cycle cap (`IMPROVE_MAX_CYCLES`).
+- **Full audit trail.** Every cycle — committed, skipped, rejected, or reverted
+  — gets a markdown record under `IMPROVE_HOME/journal/`.
+
+**You merge; EVE doesn't.** Review a branch and merge it like any PR:
+
+```bash
+git log main..self-improve/20260701-183000 --stat
+git diff main...self-improve/20260701-183000
+git merge --no-ff self-improve/20260701-183000   # onto a branch YOU choose
+git worktree remove ~/.eve/improve/worktrees/20260701-183000  # tidy up after
+```
+
+```
+eve/improve/
+  loop.py         orchestrator: idle-gated cycle state machine (daemon thread)
+  activity.py     ActivityMonitor — the idle clock; conversation always wins
+  subagent.py     researcher / engineer / reviewer roles + the constitution
+  workspace.py    git-worktree sandbox: guardrailed file tools, pytest, commit
+  guardrails.py   the hard lines: worktree-only writes, branch discipline,
+                  memory untouchable, dangerous-diff scan, file budget
+  reflection.py   sleep-time memory consolidation (additive-only)
+  codebase.py     self-awareness: compact repo map for prompts
+  journal.py      per-cycle markdown audit trail
+  state.py        backlog + history across sessions (JSON, outside the repo)
+```
+
+---
+
