@@ -49,6 +49,25 @@ async def test_retries_then_succeeds(monkeypatch):
     assert calls["n"] == 2  # first failed, retry succeeded
 
 
+async def test_ollama_tool_parse_500_is_retried(monkeypatch):
+    """Ollama+qwen's malformed-tool-call 500 is transient — retry, don't crash."""
+    calls = {"n": 0}
+
+    def fake_completion(**kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise _ToolUseFailed("Server error '500 Internal Server Error' for url ...")
+        return _text_response("recovered")
+
+    monkeypatch.setattr(mod.litellm, "completion", fake_completion)
+    monkeypatch.setattr(mod.asyncio, "sleep", _no_sleep)
+
+    client = _make_client()
+    reply = await client.respond(messages=[{"role": "user", "content": "hi"}], tools=[{}])
+    assert reply == "recovered"
+    assert calls["n"] == 2  # first failed, retry succeeded
+
+
 async def test_falls_back_to_no_tools_when_persistent(monkeypatch):
     """If tool calls keep failing, answer once without tools instead of crashing."""
     seen_tools = []

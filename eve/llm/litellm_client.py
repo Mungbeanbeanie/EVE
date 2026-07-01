@@ -20,10 +20,16 @@ from eve.llm.base import LLMClient, Message
 
 log = logging.getLogger(__name__)
 
-# Some providers (notably Groq + Llama) occasionally emit a malformed tool call the
-# provider itself can't parse, and reject the request with HTTP 400 "tool_use_failed"
-# instead of returning a message. It's sampling-dependent, so a retry usually works.
-_TOOL_FORMAT_MARKERS = ("tool_use_failed", "failed to call a function")
+# Some providers occasionally emit a malformed tool call the provider itself
+# can't parse and reject the request instead of returning a message. Seen live:
+# Groq + Llama (HTTP 400 "tool_use_failed") and Ollama + qwen3.5 ("tool call
+# parsing failed" → HTTP 500). It's sampling-dependent, so a retry usually works.
+_TOOL_FORMAT_MARKERS = (
+    "tool_use_failed",
+    "failed to call a function",
+    "tool call parsing failed",
+    "internal server error",  # Ollama surfaces the parse failure as a bare 500
+)
 _TOOL_FORMAT_RETRIES = 2  # extra attempts after the first before giving up
 
 
