@@ -40,6 +40,9 @@ Hard rules (mechanically enforced; violating them wastes the whole cycle):
 6. Match the house style: module docstrings that explain intent, type hints,
    comments that say WHY. Keep code readable and modular.
 7. The full test suite must pass before a change is accepted.
+8. Be economical: your context window is limited. Read only the files you need,
+   use search_code to find things instead of reading everything, and prefer
+   replace_in_file over rewriting whole files.
 """
 
 RESEARCHER_ROLE = """\

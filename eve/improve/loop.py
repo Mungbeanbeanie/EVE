@@ -279,7 +279,12 @@ class SelfImprovementLoop:
             tools = subagent.read_tools(ws)
             if self._web_search is not None:
                 tools.append(subagent.make_web_search_tool(self._web_search))
-            researcher = Subagent("researcher", subagent.RESEARCHER_ROLE, llm, tools)
+            # A tight tool budget keeps the researcher's conversation well inside
+            # a local model's context window (overflow → truncated system prompt
+            # → degenerate empty replies; observed live with a 32k window).
+            researcher = Subagent(
+                "researcher", subagent.RESEARCHER_ROLE, llm, tools, max_iterations=10
+            )
             reply = await researcher.run(
                 f"Focus area for this cycle: {focus}.\n\n"
                 f"Codebase map:\n{repo_map}\n\n"
@@ -288,7 +293,7 @@ class SelfImprovementLoop:
             )
             ideas = subagent.parse_ideas(reply)
             self.state.backlog.extend(ideas)
-            entry.research = reply[-3000:]
+            entry.research = reply[-3000:] or "(researcher returned no text)"
         if not self.state.backlog:
             return None
         idea = self.state.backlog.pop(0)

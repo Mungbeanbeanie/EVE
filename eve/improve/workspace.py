@@ -26,7 +26,13 @@ log = logging.getLogger(__name__)
 _GIT_IDENTITY = ("-c", "user.name=EVE (self-improve)", "-c", "user.email=eve@selfimprove.local")
 
 _TEST_TIMEOUT = 900  # seconds; the suite runs in ~3s today, this is headroom
-_READ_CAP = 40_000   # chars per read_file call — keeps prompts bounded
+# Tool-output caps exist to keep a whole subagent conversation inside a local
+# model's context window (~32k tokens on Ollama): overflow makes the server
+# silently drop the oldest tokens — including the system prompt — and the model
+# degenerates into empty replies. 20k chars still covers every file in the
+# repo today (largest ≈ 17.5k).
+_READ_CAP = 20_000   # chars per read_file call
+_LIST_CAP = 6_000    # chars per list_files / search_code call
 _TAIL_CAP = 4_000    # chars of test output kept for prompts/journal
 
 
@@ -92,14 +98,15 @@ class Workspace:
     def list_files(self, subdir: str = "") -> str:
         base = guardrails.safe_worktree_path(self.path, subdir) if subdir else self.path
         out = _git(self.path, "ls-files", "--", str(base))
-        return out or "(no tracked files)"
+        return _clip(out, _LIST_CAP) or "(no tracked files)"
 
     def search_code(self, pattern: str) -> str:
         """`git grep -n` over the sandbox (fixed argv — no shell)."""
         try:
-            return _git(self.path, "grep", "-n", "-I", "--", pattern) or "(no matches)"
+            out = _git(self.path, "grep", "-n", "-I", "--", pattern)
         except RuntimeError:
             return "(no matches)"  # git grep exits 1 on zero hits
+        return _clip(out, _LIST_CAP) or "(no matches)"
 
     # ── Verification ──────────────────────────────────────────────────────────
     def run_tests(self) -> TestResult:
@@ -167,6 +174,10 @@ class Workspace:
 
         _git(self.path, *_GIT_IDENTITY, "commit", "-m", message)
         return _git(self.path, "rev-parse", "--short", "HEAD")
+
+
+def _clip(text: str, cap: int) -> str:
+    return text if len(text) <= cap else text[:cap] + f"\n… (truncated at {cap} chars)"
 
 
 def _git(cwd: Path, *args: str) -> str:
