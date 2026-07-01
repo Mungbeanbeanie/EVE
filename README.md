@@ -239,6 +239,11 @@ local model researches, implements, and test-gates small improvements to EVE's
 own codebase, and consolidates conversational memory. When you come back, the
 loop yields instantly — conversation always runs on your (lighter) chat model.
 
+"Idle" means **not talking to EVE** — nothing else. The timer is driven only by
+EVE conversation turns; EVE never watches your keyboard, mouse, or screen. Use
+your computer however you like and EVE keeps improving in the background until
+you next speak or type to it.
+
 The design borrows from published work on self-improving agents:
 
 - **Sleep-time compute** ([Letta](https://www.letta.com/blog/sleep-time-compute/)):
