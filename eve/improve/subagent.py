@@ -97,23 +97,47 @@ class Subagent:
         # is no user present to confirm anything during sleep time.
         self.executor = ToolExecutor(registry=self.registry)
 
-    async def run(self, task: str) -> str:
-        """One mission → the model's final text (thinking blocks stripped)."""
+    async def run(self, task: str, *, require: tuple[str, ...] = ()) -> str:
+        """One mission → the model's final text (thinking blocks stripped).
+
+        `require` names the verdict labels the reply must end with (e.g.
+        ("CHANGE", "SKIP")). Local models sometimes stop mid-thought — "Let me
+        check X:" with no tool call — so a reply missing its verdict gets one
+        nudge to continue before the caller sees it.
+        """
         messages = [
             {"role": "system", "content": CONSTITUTION + "\n" + self.role_prompt},
             {"role": "user", "content": task},
         ]
-        specs = self.registry.specs() or None
         log.info("[improve] subagent %s starting (%d tools)", self.name, len(self.registry))
+        reply = strip_thinking(await self._respond(messages))
+        if require and final_verdict(reply, *require) is None:
+            # respond() left the tool exchanges in `messages`; append the stray
+            # answer and ask the model to land the final line it owes us.
+            messages.append({"role": "assistant", "content": reply})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "You stopped without your required final line. Continue the "
+                        "task (use tools if needed), then end with exactly one line "
+                        f"starting with one of: {', '.join(f'{r}:' for r in require)}"
+                    ),
+                }
+            )
+            reply = strip_thinking(await self._respond(messages))
+        return reply
+
+    async def _respond(self, messages: list[dict]) -> str:
+        specs = self.registry.specs() or None
         try:
-            reply = await self.llm.respond(
+            return await self.llm.respond(
                 messages, tools=specs, executor=self.executor,
                 max_iterations=self.max_iterations,
             )
         except TypeError:
             # A custom LLMClient without the max_iterations extension — use its default.
-            reply = await self.llm.respond(messages, tools=specs, executor=self.executor)
-        return strip_thinking(reply)
+            return await self.llm.respond(messages, tools=specs, executor=self.executor)
 
 
 def strip_thinking(text: str) -> str:

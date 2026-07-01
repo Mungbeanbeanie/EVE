@@ -283,7 +283,8 @@ class SelfImprovementLoop:
             reply = await researcher.run(
                 f"Focus area for this cycle: {focus}.\n\n"
                 f"Codebase map:\n{repo_map}\n\n"
-                f"Previous cycles (do not repeat):\n{self.state.history_digest()}"
+                f"Previous cycles (do not repeat):\n{self.state.history_digest()}",
+                require=("IDEA",),
             )
             ideas = subagent.parse_ideas(reply)
             self.state.backlog.extend(ideas)
@@ -308,7 +309,8 @@ class SelfImprovementLoop:
         reply = await engineer.run(
             f"Improvement idea to implement now:\nIDEA: {idea}\n\n"
             f"Cycle focus: {focus}.\n\nCodebase map:\n{repo_map}\n\n"
-            f"Previous cycles:\n{self.state.history_digest()}"
+            f"Previous cycles:\n{self.state.history_digest()}",
+            require=("CHANGE", "SKIP"),
         )
         verdict = subagent.final_verdict(reply, "CHANGE", "SKIP")
         if verdict is None or verdict[0] == "SKIP":
@@ -356,7 +358,8 @@ class SelfImprovementLoop:
         )
         reply = await reviewer.run(
             f"Proposed change:\n{entry.change}\n\nUnified diff:\n```diff\n{diff[:20000]}\n```\n\n"
-            f"Test output (passing):\n{entry.tests}"
+            f"Test output (passing):\n{entry.tests}",
+            require=("APPROVE", "REJECT"),
         )
         verdict = subagent.final_verdict(reply, "APPROVE", "REJECT")
         entry.review = f"{verdict[0]}: {verdict[1]}" if verdict else "REJECT: no parseable verdict"
