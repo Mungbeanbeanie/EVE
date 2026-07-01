@@ -69,9 +69,13 @@ class LiteLLMClient(LLMClient):
             for call in msg.tool_calls:
                 result = await executor.run(call.function.name, call.function.arguments)
                 messages.append(Message(role="tool", content=str(result), tool_call_id=call.id))
-        raise RuntimeError(
-            f"Tool-use loop exceeded {max_iterations} iterations — possible runaway model."
-        )
+        # Tool budget exhausted while the model still wants more calls. Withhold
+        # the tools and ask once more (same shape as the format-error fallback),
+        # so the caller gets the best answer available from what was gathered
+        # instead of a crashed turn or a dead self-improvement cycle.
+        log.warning("Tool budget (%d calls) exhausted; forcing a tool-free final answer", max_iterations)
+        resp = await self._completion(messages, tools=None)
+        return resp.choices[0].message.content or ""
 
     async def _completion(self, messages: list[Message], tools: list[dict] | None):
         """Call the provider, retrying transient malformed-tool-call rejections.

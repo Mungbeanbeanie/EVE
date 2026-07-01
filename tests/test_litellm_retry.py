@@ -70,6 +70,38 @@ async def test_falls_back_to_no_tools_when_persistent(monkeypatch):
     assert sum(1 for t in seen_tools if t) == mod._TOOL_FORMAT_RETRIES + 1
 
 
+async def test_tool_budget_exhaustion_forces_a_final_answer(monkeypatch):
+    """A model that never stops calling tools gets one tool-free closing call."""
+
+    class _ToolMsg:
+        tool_calls = [SimpleNamespace(function=SimpleNamespace(name="t", arguments="{}"), id="1")]
+        content = None
+
+        @staticmethod
+        def model_dump():
+            return {"role": "assistant", "content": None}
+
+    class _StubExecutor:
+        async def run(self, name, arguments):
+            return "ok"
+
+    def fake_completion(**kwargs):
+        if kwargs.get("tools"):  # keeps asking for tools forever
+            return SimpleNamespace(choices=[SimpleNamespace(message=_ToolMsg())])
+        return _text_response("best answer from what I gathered")
+
+    monkeypatch.setattr(mod.litellm, "completion", fake_completion)
+
+    client = _make_client()
+    reply = await client.respond(
+        messages=[{"role": "user", "content": "go"}],
+        tools=[{}],
+        executor=_StubExecutor(),
+        max_iterations=3,
+    )
+    assert reply == "best answer from what I gathered"
+
+
 async def test_non_tool_errors_propagate(monkeypatch):
     """A real error (auth/network) is NOT swallowed by the tool-format retry."""
     def fake_completion(**kwargs):
