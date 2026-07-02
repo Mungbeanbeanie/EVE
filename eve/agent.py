@@ -13,6 +13,7 @@ import re
 
 from eve.config import Config
 from eve.improve.activity import ActivityMonitor
+from eve.llm.base import LLMClient
 from eve.llm.factory import build_llm
 from eve.llm.sanitize import sanitize
 from eve.memory.manager import MemoryManager
@@ -39,7 +40,7 @@ class Agent:
         audio: PyAudioIO,
         stt: WhisperSTT,
         tts: TTSEngine,
-        llm,  # LLMClient — provider-agnostic, built by the factory
+        llm: LLMClient,  # provider-agnostic, built by the factory
         memory: MemoryManager,
         tools: ToolRegistry,
         executor: ToolExecutor,
