@@ -78,8 +78,19 @@ class LiteLLMClient(LLMClient):
         # Tool budget exhausted while the model still wants more calls. Withhold
         # the tools and ask once more (same shape as the format-error fallback),
         # so the caller gets the best answer available from what was gathered
-        # instead of a crashed turn or a dead self-improvement cycle.
+        # instead of a crashed turn or a dead self-improvement cycle. The
+        # explicit wrap-up line matters: without it, mid-investigation local
+        # models keep narrating their next step instead of concluding.
         log.warning("Tool budget (%d calls) exhausted; forcing a tool-free final answer", max_iterations)
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Your tool budget is exhausted — no more tool calls are possible. "
+                    "Give your final answer now, based on what you already have."
+                ),
+            }
+        )
         resp = await self._completion(messages, tools=None)
         return resp.choices[0].message.content or ""
 

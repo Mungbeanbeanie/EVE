@@ -119,19 +119,22 @@ class Subagent:
         reply = strip_thinking(await self._respond(messages))
         if require and final_verdict(reply, *require) is None:
             # respond() left the tool exchanges in `messages`; append the stray
-            # answer and ask the model to land the final line it owes us.
+            # answer and demand the final line it owes us. The nudge round gets
+            # NO tools: offering them just invites another lap of exploration
+            # narration ("Let me check X…") — observed live with ornith:35b.
             messages.append({"role": "assistant", "content": reply})
             messages.append(
                 {
                     "role": "user",
                     "content": (
-                        "You stopped without your required final line. Continue the "
-                        "task (use tools if needed), then end with exactly one line "
-                        f"starting with one of: {', '.join(f'{r}:' for r in require)}"
+                        "You stopped without your required final line. No more tool "
+                        "calls — conclude from what you already learned, ending with "
+                        "exactly one line starting with one of: "
+                        + ", ".join(f"{r}:" for r in require)
                     ),
                 }
             )
-            reply = strip_thinking(await self._respond(messages))
+            reply = strip_thinking(await self.llm.respond(messages, tools=None))
         return reply
 
     async def _respond(self, messages: list[dict]) -> str:
