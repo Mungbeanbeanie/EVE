@@ -174,7 +174,7 @@ def test_history_digest_respects_n_param(state_file: Path):
 
     # Request only 3 → digest should have exactly 3 lines.
     digest = state.history_digest(n=3)
-    lines = [l for l in digest.splitlines() if l.strip()]
+    lines = [line for line in digest.splitlines() if line.strip()]
     assert len(lines) == 3
 
 
@@ -256,7 +256,7 @@ def test_empty_backlog_round_trips(state_file: Path):
     state = ImproveState(backlog=[])
     save_state(state_file, state)
     # sanity: confirm what was written before loading
-    raw = json.loads(state_file.read_text(encoding="utf-8"))
+    assert json.loads(state_file.read_text(encoding="utf-8"))["backlog"] == []
     loaded = load_state(state_file)
     assert loaded.backlog == []
 

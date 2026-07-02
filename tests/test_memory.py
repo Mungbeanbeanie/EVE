@@ -7,11 +7,8 @@ parsing logic without spinning up FAISS or FastEmbed.
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 from eve.memory.procedural import PROCEDURAL_NS, ProceduralMemory
 from eve.memory.working import WorkingMemory

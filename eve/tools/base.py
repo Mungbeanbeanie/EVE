@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
+
+if TYPE_CHECKING:  # registry.py imports this module — import only for the annotation
+    from eve.tools.registry import ToolRegistry
 
 
 @dataclass

@@ -9,7 +9,6 @@ buried or retrieved facts get lost.
 
 from __future__ import annotations
 
-import pytest
 
 from eve.memory.working import WorkingMemory
 
@@ -68,6 +67,7 @@ class TestRenderAppendWhenNoUserMessage:
 
         system_msgs = [m for m in msgs if m["role"] == "system"]
         note = next(m for m in system_msgs if "Relevant things you remember:" in m["content"])
+        assert "Prefers Python." in note["content"]
 
         assert len(system_msgs) == 2, f"Expected original system prompt + memory note (2 total), got {len(system_msgs)}"
         # Note should be the only extra message after system prompt.

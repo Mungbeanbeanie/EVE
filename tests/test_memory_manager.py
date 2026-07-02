@@ -8,7 +8,6 @@ episodic layers with the formatted content.
 from __future__ import annotations
 
 import asyncio
-import re
 
 import pytest
 
