@@ -68,13 +68,23 @@ class WorkingMemory:
         """
         curr_messages = self.snapshot()
         if retrieved:
-            retrieved_content = "\n".join(f"- {msg['content']}" for msg in retrieved)
-            memory_note: Message = {
-                "role": "system",
-                "content": f"Relevant things you remember:\n{retrieved_content}",
-            }
-            if curr_messages and curr_messages[-1]["role"] == "user":
+            # Only inject the memory note when there is actual conversation
+            # context (system prompt + at least one prior message). On a first
+            # turn with no history, there's nowhere useful to place it.
+            if len(curr_messages) >= 2 and curr_messages[-1]["role"] == "user":
+                retrieved_content = "\n".join(f"- {msg['content']}" for msg in retrieved)
+                memory_note: Message = {
+                    "role": "system",
+                    "content": f"Relevant things you remember:\n{retrieved_content}",
+                }
                 curr_messages.insert(-1, memory_note)
             else:
+                # No conversation yet — append the note at the end so it still
+                # reaches the model on first turn.
+                retrieved_content = "\n".join(f"- {msg['content']}" for msg in retrieved)
+                memory_note: Message = {
+                    "role": "system",
+                    "content": f"Relevant things you remember:\n{retrieved_content}",
+                }
                 curr_messages.append(memory_note)
         return curr_messages

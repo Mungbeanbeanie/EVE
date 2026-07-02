@@ -103,11 +103,12 @@ pip install faster-whisper webrtcvad pyttsx3 pyaudio
 python main.py --mode voice       # mic → STT → LLM → TTS → speaker
 ```
 
-**Voice output** uses the local, offline `pyttsx3` engine by default. For a
-higher-quality or custom (cloned) voice, set `ELEVENLABS_API_KEY` and EVE switches
-to [ElevenLabs](https://elevenlabs.io) cloud TTS — streamed as PCM for low latency
-— falling back to the local voice automatically if the key is missing or a request
-fails. Pick a voice with `ELEVENLABS_VOICE_ID` (list them via
+**Voice output** uses a local, offline engine by default — `pyttsx3` on Linux/Windows,
+the macOS `say` binary on macOS (because pyttsx3's NSSpeechSynthesizer driver hangs off
+the main thread). For a higher-quality or custom (cloned) voice, set `ELEVENLABS_API_KEY`
+and EVE switches to [ElevenLabs](https://elevenlabs.io) cloud TTS — streamed as PCM for
+low latency — falling back to the local voice automatically if the key is missing or a
+request fails. Pick a voice with `ELEVENLABS_VOICE_ID` (list them via
 `python -m eve.pipeline.tts`) and a model with `ELEVENLABS_MODEL`
 (`eleven_flash_v2_5` is the lowest-latency choice). See `.env.example`.
 

@@ -27,18 +27,16 @@ from eve.config import Config
 log = logging.getLogger(__name__)
 
 
-class _DropFaissKeywordWarning(logging.Filter):
-    """Drop mem0's "faiss has no keyword search" warning.
+def _drop_faiss_keyword(record: logging.LogRecord) -> bool:
+    """Return False if the message is mem0's "does not support keyword search" warning.
 
-    FAISS has no keyword index, so mem0 warns that hybrid (BM25) search is
-    disabled. EVE uses semantic search only, so this line is not actionable.
+    Used as a ``logging.Filter`` callback — loggers call it with each ``LogRecord``
+    and drop records where this returns ``False``.
     """
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        return "does not support keyword search" not in record.getMessage()
+    return "does not support keyword search" not in record.getMessage()
 
 
-logging.getLogger("mem0.memory.main").addFilter(_DropFaissKeywordWarning())
+logging.getLogger("mem0.memory.main").addFilter(_drop_faiss_keyword)
 
 COLLECTION = "eve"
 

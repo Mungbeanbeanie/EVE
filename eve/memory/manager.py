@@ -15,6 +15,7 @@ import re
 
 from eve.config import Config
 from eve.llm.base import Message
+from eve.memory.base import MemoryRecord
 from eve.memory.episodic import EpisodicMemory
 from eve.memory.mem0_backend import Mem0Backend
 from eve.memory.procedural import ProceduralMemory
@@ -63,9 +64,19 @@ class MemoryManager:
                 self.procedural.search(query, k=5),
                 self.episodic.search(query, k=5),
             )
+            # Merge procedural + episodic results and deduplicate by content,
+            # preserving insertion order (procedural first, then episodic). A fact
+            # that surfaces from both layers is kept once — duplicates waste the
+            # context window and can confuse the LLM with redundant signals.
+            seen: set[str] = set()
+            merged: list[MemoryRecord] = []
+            for r in (*proc_records, *epis_records):
+                if r.content not in seen:
+                    seen.add(r.content)
+                    merged.append(r)
             retrieved = [
                 {"role": "system", "content": r.content}
-                for r in (*proc_records, *epis_records)
+                for r in merged
             ]
         except Exception as exc:  # backend down / not configured — degrade, don't die
             log.warning("Long-term recall unavailable, using working memory only: %s", exc)
@@ -147,6 +158,15 @@ class MemoryManager:
 
         Call before shutdown so the last turn(s) aren't lost when the event loop
         closes. Safe to call when nothing is pending.
+
+        Snapshot into a local list first — ``self._pending`` is mutated by each
+        task's done-callback (which calls ``discard()``), and unpacking the set
+        directly in ``gather(*self._pending, ...)`` would iterate over it while
+        callbacks fire, risking a mutation-during-iteration error or silently
+        dropping writes that race in after this flush started. New writes arriving
+        mid-flush are intentionally deferred to the next call — they were created
+        *after* we decided what "last" means.
         """
         if self._pending:
-            await asyncio.gather(*self._pending, return_exceptions=True)
+            tasks = list(self._pending)
+            await asyncio.gather(*tasks, return_exceptions=True)

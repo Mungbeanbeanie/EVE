@@ -33,21 +33,18 @@ class WhisperSTT(STTEngine):
     """Concrete STT using a locally-loaded faster-whisper model."""
 
     def __init__(self, config: Config) -> None:
+        # Eagerly load the model here (not lazily in `transcribe`) so the multi-second
+        # cold start happens during agent startup — before the user speaks — rather than
+        # on the first utterance where it would be felt as a noticeable latency spike.
         self.model_name = config.whisper_model   # tiny | base | small | medium | large
         self.device = config.whisper_device      # auto | cpu | cuda (cpu on Intel mac)
-        self._model = None                       # lazy-loaded on first use (slow to load)
-
-    def _ensure_model(self) -> None:
-        """Load the faster-whisper model once, choosing device + compute type."""
-        if self._model is not None:
-            return
         device = "cpu" if self.device == "auto" else self.device
         compute_type = "int8" if device == "cpu" else "float16"
+        log.info("Loading Whisper model %s (%s/%s)", self.model_name, device, compute_type)
         self._model = WhisperModel(self.model_name, device=device, compute_type=compute_type)
 
     async def transcribe(self, audio: bytes) -> str:
         """Convert a PCM audio buffer to text and return the recognized utterance."""
-        self._ensure_model()
         samples = np.frombuffer(audio, np.int16).astype(np.float32) / 32768.0
 
         def transcribe() -> str:
