@@ -104,6 +104,15 @@ class MemoryManager:
 
         Call before shutdown so the last turn(s) aren't lost when the event loop
         closes. Safe to call when nothing is pending.
+
+        Snapshot into a local list first — ``self._pending`` is mutated by each
+        task's done-callback (which calls ``discard()``), and unpacking the set
+        directly in ``gather(*self._pending, ...)`` would iterate over it while
+        callbacks fire, risking a mutation-during-iteration error or silently
+        dropping writes that race in after this flush started. New writes arriving
+        mid-flush are intentionally deferred to the next call — they were created
+        *after* we decided what "last" means.
         """
         if self._pending:
-            await asyncio.gather(*self._pending, return_exceptions=True)
+            tasks = list(self._pending)
+            await asyncio.gather(*tasks, return_exceptions=True)
