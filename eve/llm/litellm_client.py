@@ -123,7 +123,7 @@ class LiteLLMClient(LLMClient):
                     "Provider rejected a malformed tool call (attempt %d/%d); retrying",
                     attempt + 1, attempts,
                 )
-                await asyncio.sleep(0.4 * (attempt + 1))  # brief backoff before resampling
+                await asyncio.sleep(0.4 * (2 ** attempt))  # exponential backoff for transient errors
         raise _ToolCallFormatError("retry loop exhausted")  # unreachable
 
     @staticmethod
