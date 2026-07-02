@@ -29,9 +29,10 @@ _TEST_TIMEOUT = 900  # seconds; the suite runs in ~3s today, this is headroom
 # Tool-output caps exist to keep a whole subagent conversation inside a local
 # model's context window (~32k tokens on Ollama): overflow makes the server
 # silently drop the oldest tokens — including the system prompt — and the model
-# degenerates into empty replies. 20k chars still covers every file in the
-# repo today (largest ≈ 17.5k).
-_READ_CAP = 20_000   # chars per read_file call
+# degenerates into empty replies. Live logs showed a 10-read research phase
+# saturating the window at 20k chars/read, so reads are small and *paged*:
+# read_file takes start_line/end_line for anything bigger than the cap.
+_READ_CAP = 8_000    # chars per read_file call
 _LIST_CAP = 6_000    # chars per list_files / search_code call
 _TAIL_CAP = 4_000    # chars of test output kept for prompts/journal
 
@@ -65,15 +66,34 @@ class Workspace:
         return cls(path, branch, memory_dir)
 
     # ── File tools (all guardrailed) ──────────────────────────────────────────
-    def read_file(self, path: str) -> str:
+    def read_file(self, path: str, start_line: int = 1, end_line: int | None = None) -> str:
+        """Read a file (or a line range of it), capped to stay prompt-sized.
+
+        The truncation notice tells the model how to page through the rest, so
+        a large file costs several small reads instead of one huge one.
+        """
         target = guardrails.safe_worktree_path(self.path, path)
         try:
-            text = target.read_text(encoding="utf-8", errors="replace")
+            lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
         except FileNotFoundError:
             raise GuardrailViolation(f"no such file in the sandbox: {path!r}") from None
-        if len(text) > _READ_CAP:
-            text = text[:_READ_CAP] + f"\n… (truncated at {_READ_CAP} chars)"
-        return text
+
+        start = max(int(start_line), 1)
+        end = min(int(end_line), len(lines)) if end_line else len(lines)
+        # Plain text (no line-number prefixes) so the model can copy exact
+        # snippets straight into replace_in_file's old_text.
+        text, last = "", start - 1
+        for i in range(start - 1, end):
+            if len(text) + len(lines[i]) > _READ_CAP:
+                break
+            text += lines[i] + "\n"
+            last = i + 1
+        if last < end:
+            text += (
+                f"… (stopped at line {last} of {len(lines)}; "
+                f"call read_file again with start_line={last + 1} for more)"
+            )
+        return text or "(empty range)"
 
     def write_file(self, path: str, content: str) -> str:
         target = guardrails.safe_worktree_path(self.path, path)
@@ -82,9 +102,16 @@ class Workspace:
         return f"wrote {len(content)} chars to {path}"
 
     def replace_in_file(self, path: str, old_text: str, new_text: str) -> str:
-        """Surgical exact-match edit; errors guide the model to self-correct."""
+        """Surgical exact-match edit; errors guide the model to self-correct.
+
+        Operates on the raw file — never the capped read_file view — so an
+        edit to a large file can't silently write back a truncated copy.
+        """
         target = guardrails.safe_worktree_path(self.path, path)
-        text = self.read_file(path)
+        try:
+            text = target.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            raise GuardrailViolation(f"no such file in the sandbox: {path!r}") from None
         count = text.count(old_text)
         if count == 0:
             raise GuardrailViolation(f"old_text not found in {path!r} (must match exactly)")

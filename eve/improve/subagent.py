@@ -52,6 +52,9 @@ concrete, small, high-value improvement ideas for THIS codebase.
 Use web_search for state-of-the-art agent/memory engineering when helpful; read
 files to ground every idea in reality. If search is unavailable, rely on your
 own knowledge. Do not propose ideas already done (see history).
+Your tool budget is small: skim at most 2-3 files (use search_code to aim your
+reads) — you are choosing WHAT to improve, not implementing it, so you never
+need whole files. Ideas beat exhaustive reading.
 Finish with 1-3 lines, each formatted exactly:
 IDEA: <title> | <what to change and in which files> | <why it makes EVE better>
 """
@@ -177,11 +180,6 @@ def _tool(name: str, description: str, params: dict, fn: Callable[..., Any]) -> 
 
 def read_tools(ws: Workspace) -> list[Tool]:
     """Tools that inspect the sandbox (safe for every role)."""
-    path_param = {
-        "type": "object",
-        "properties": {"path": {"type": "string", "description": "Path relative to the repo root."}},
-        "required": ["path"],
-    }
     return [
         _tool(
             "list_files",
@@ -189,7 +187,21 @@ def read_tools(ws: Workspace) -> list[Tool]:
             {"type": "object", "properties": {"subdir": {"type": "string", "default": ""}}},
             ws.list_files,
         ),
-        _tool("read_file", "Read one file from the sandbox repo.", path_param, ws.read_file),
+        _tool(
+            "read_file",
+            "Read one file (or a line range) from the sandbox repo. Large files "
+            "are paged: pass start_line/end_line to continue where a read stopped.",
+            {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path relative to the repo root."},
+                    "start_line": {"type": "integer", "description": "First line to read (default 1).", "default": 1},
+                    "end_line": {"type": "integer", "description": "Last line to read (default: end of file)."},
+                },
+                "required": ["path"],
+            },
+            ws.read_file,
+        ),
         _tool(
             "search_code",
             "Search the sandbox repo for a string/regex (git grep -n).",

@@ -281,9 +281,10 @@ class SelfImprovementLoop:
                 tools.append(subagent.make_web_search_tool(self._web_search))
             # A tight tool budget keeps the researcher's conversation well inside
             # a local model's context window (overflow → truncated system prompt
-            # → degenerate empty replies; observed live with a 32k window).
+            # → degenerate empty replies; observed live with a 32k window, where
+            # even 10 capped reads saturated the slot).
             researcher = Subagent(
-                "researcher", subagent.RESEARCHER_ROLE, llm, tools, max_iterations=10
+                "researcher", subagent.RESEARCHER_ROLE, llm, tools, max_iterations=6
             )
             reply = await researcher.run(
                 f"Focus area for this cycle: {focus}.\n\n"

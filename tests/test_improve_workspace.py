@@ -84,6 +84,28 @@ def test_reset_discards_everything_uncommitted(workspace: Workspace):
     assert '"hi"' in workspace.read_file("hello.py")
 
 
+def test_read_file_pages_large_files(workspace: Workspace):
+    # 3000 numbered lines ≈ 3× the read cap: one read must stop early and say
+    # exactly where to resume, and ranged reads must return plain (copyable) text.
+    workspace.write_file("big.txt", "\n".join(f"line-{i:05d}" for i in range(1, 3001)) + "\n")
+    first = workspace.read_file("big.txt")
+    assert "line-00001" in first and "line-03000" not in first
+    assert "start_line=" in first  # the resume hint
+    ranged = workspace.read_file("big.txt", start_line=2999, end_line=3000)
+    assert ranged.splitlines()[:2] == ["line-02999", "line-03000"]
+
+
+def test_replace_in_file_never_truncates_large_files(workspace: Workspace):
+    # The edit must operate on the raw file, not the capped read view: after
+    # replacing one string in an over-cap file, every byte must survive.
+    content = "\n".join(f"line-{i:05d}" for i in range(1, 3001)) + "\n"
+    workspace.write_file("big.txt", content)
+    workspace.replace_in_file("big.txt", "line-02999", "line-CHANGED")
+    result = (workspace.path / "big.txt").read_text(encoding="utf-8")
+    assert "line-CHANGED" in result and "line-03000" in result
+    assert len(result) == len(content) + len("line-CHANGED") - len("line-02999")
+
+
 def test_run_tests_passes_in_a_healthy_sandbox(workspace: Workspace):
     result = workspace.run_tests()
     assert result.ok, result.output
