@@ -11,6 +11,7 @@ It owns all three layers and exposes two verbs:
 from __future__ import annotations
 import asyncio
 import logging
+import re
 
 from eve.config import Config
 from eve.llm.base import Message
@@ -89,10 +90,52 @@ class MemoryManager:
         self._pending.add(task)
         task.add_done_callback(self._pending.discard)
 
+    def _format_episodic_content(self, *, user: str, assistant: str) -> str:
+        """Format a turn into clean, embeddable episodic content.
+
+        Strips verbose tool outputs (code blocks, JSON arrays, HTML) from the
+        assistant's response and adds a structured prefix to improve semantic
+        search recall. The goal is to store the *meaning* of what happened, not
+        the raw transcript full of noise.
+
+        Why this matters:
+            Raw tool outputs often contain hundreds of lines of JSON, HTML, or code
+            that dilutes the embedding vector and makes relevant memories harder to
+            retrieve. By stripping the noise before storage, semantic search focuses
+            on what actually happened rather than formatting artifacts.
+        """
+        content = assistant
+
+        # 1. Strip markdown code blocks (```json, ```python, etc.) — these are
+        #    almost always tool outputs or generated code that doesn't help recall.
+        content = re.sub(r"```[\s\S]*?```", "[tool output omitted]", content)
+
+        # 2. Strip large JSON arrays/objects (>100 chars) that look like raw API
+        #    responses — too verbose for meaningful embedding, and the summary
+        #    of what happened is captured in the surrounding text.
+        content = re.sub(
+            r"\{[^{}]{100,}\}", "[structured data omitted]", content
+        )
+        content = re.sub(
+            r"\[[^\[\]]{100,}\]", "[structured data omitted]", content
+        )
+
+        # 3. Strip HTML/XML blocks — raw API responses in markup are rarely useful.
+        content = re.sub(r"<[a-zA-Z][\s\S]*?</[a-zA-Z]>", "", content)
+
+        # Collapse excessive whitespace left behind by stripping.
+        content = re.sub(r"\n{3,}", "\n\n", content).strip()
+
+        # Add structured prefix for better searchability — the "Event:" marker
+        # gives the embedder a clear signal that this is a past event record.
+        summary = user[:80] + "..." if len(user) > 80 else user
+        return f"Event: {summary}\nUser: {user}\nAssistant: {content}"
+
     async def _persist_longterm(self, *, user: str, assistant: str) -> None:
         """Best-effort durable write of one turn (runs in the background)."""
         try:
-            await self.episodic.add(f"User: {user}\nEVE: {assistant}")
+            formatted = self._format_episodic_content(user=user, assistant=assistant)
+            await self.episodic.add(formatted)
 
             if "from now on" in user.lower() or "always" in user.lower():
                 await self.procedural.add(f"User: {user}\nEVE: {assistant}")
