@@ -14,6 +14,7 @@ import logging
 
 from eve.config import Config
 from eve.llm.base import Message
+from eve.memory.base import MemoryRecord
 from eve.memory.episodic import EpisodicMemory
 from eve.memory.mem0_backend import Mem0Backend
 from eve.memory.procedural import ProceduralMemory
@@ -62,9 +63,19 @@ class MemoryManager:
                 self.procedural.search(query, k=5),
                 self.episodic.search(query, k=5),
             )
+            # Merge procedural + episodic results and deduplicate by content,
+            # preserving insertion order (procedural first, then episodic). A fact
+            # that surfaces from both layers is kept once — duplicates waste the
+            # context window and can confuse the LLM with redundant signals.
+            seen: set[str] = set()
+            merged: list[MemoryRecord] = []
+            for r in (*proc_records, *epis_records):
+                if r.content not in seen:
+                    seen.add(r.content)
+                    merged.append(r)
             retrieved = [
                 {"role": "system", "content": r.content}
-                for r in (*proc_records, *epis_records)
+                for r in merged
             ]
         except Exception as exc:  # backend down / not configured — degrade, don't die
             log.warning("Long-term recall unavailable, using working memory only: %s", exc)
