@@ -47,5 +47,12 @@ class ToolAdapter(ABC):
     """
 
     @abstractmethod
-    def register_into(self, registry: "Any") -> None:
-        """Create this adapter's tools and add them to the registry."""
+    def register_into(self, registry: ToolRegistry) -> None:
+        """Register every tool this adapter provides into *registry*.
+
+        Contract (side-effect): mutate *registry* in place by calling
+        ``registry.register(tool)`` for each :class:`Tool` the adapter builds.
+        Subclasses must not return a value — registration is purely a side
+        effect on the shared registry, so the same adapter instance can be
+        re-registered at runtime (e.g. after auth refresh) without leaking.
+        """
