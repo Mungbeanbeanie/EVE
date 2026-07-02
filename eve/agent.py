@@ -77,10 +77,38 @@ class Agent:
                         "Report on EVE's own self-improvement loop: what it is doing "
                         "right now, which sandbox branch it is working on, and the "
                         "most recent improvement cycles from its journal. Use this "
-                        "when the user asks what you've been improving or learning."
+                        "when the user asks what you've been improving or learning, "
+                        "or what happened while they were away."
                     ),
                     parameters={"type": "object", "properties": {}},
                     handler=self._improvement_status,
+                )
+            )
+            self.tools.register(
+                Tool(
+                    name="request_improvement",
+                    description=(
+                        "Queue a user-directed improvement to EVE's own code. The "
+                        "sleep-time self-improvement loop will attempt it, ahead of "
+                        "its own ideas, next time the user is away. Use this whenever "
+                        "the user asks you to improve, change, add, or optimize one "
+                        "of your own features or behaviors (e.g. 'make your voice "
+                        "faster', 'add a feature that…')."
+                    ),
+                    parameters={
+                        "type": "object",
+                        "properties": {
+                            "idea": {
+                                "type": "string",
+                                "description": (
+                                    "The improvement as 1-2 concrete sentences: what "
+                                    "should change, and what success looks like."
+                                ),
+                            },
+                        },
+                        "required": ["idea"],
+                    },
+                    handler=self._request_improvement,
                 )
             )
 
@@ -190,6 +218,12 @@ class Agent:
         if self.improver is None:
             return {"enabled": False, "note": "the self-improvement loop is not running"}
         return self.improver.status()
+
+    async def _request_improvement(self, idea: str) -> dict:
+        """Tool handler: queue a user-directed improvement for idle time."""
+        if self.improver is None:
+            return {"error": "the self-improvement loop is not running"}
+        return self.improver.request(idea)
 
     async def run_voice(self) -> None:
         """Voice loop: Mic -> STT -> sanitize -> LLM -> TTS -> Speaker.

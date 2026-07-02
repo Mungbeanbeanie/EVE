@@ -275,7 +275,16 @@ make improve-status           # journal + sandbox branches at a glance
 ```
 
 Ask EVE *"what have you been improving?"* in any conversation — the
-`self_improvement_status` tool reads the loop's live state and journal.
+`self_improvement_status` tool reads the loop's live state and journal. And you
+can direct the loop yourself: tell EVE *"make your voice faster"* or *"add a
+feature that…"* and the `request_improvement` tool queues it **ahead of** the
+loop's own ideas for the next idle cycle.
+
+**When the well runs dry, the loop stops itself.** Committed cycles are its
+return signal: after `IMPROVE_STALL_CYCLES` consecutive cycles with nothing
+worth committing, it journals the fact and goes **dormant** instead of grinding
+out low-value churn. A user request wakes it immediately; so does restarting
+EVE (deliberate — a new session usually means new human commits worth a look).
 
 ### One cycle
 

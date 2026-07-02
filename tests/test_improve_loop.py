@@ -7,6 +7,7 @@ whole path — worktree, guardrails, pytest gate, journal, commit — is exercis
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 from pathlib import Path
@@ -101,6 +102,45 @@ async def test_rejected_review_reverts_everything(tmp_repo: Path, tmp_path: Path
     # Nothing landed on the branch, and the sandbox is clean again.
     assert _git_out(tmp_repo, "log", "--oneline", f"main..{entry.branch}") == ""
     assert loop._workspace.changed_files() == []
+
+
+async def test_user_request_jumps_the_queue_and_persists(tmp_repo: Path, tmp_path: Path):
+    loop = _loop(tmp_repo, tmp_path, StubLLM({"NOTES.md": "as requested\n"}))
+    loop.state.backlog.append("IDEA: researcher idea | old | stale")
+
+    result = loop.request("make the voice 20% faster")
+
+    assert "queued" in result
+    # Front of the queue, tagged with provenance, and saved to disk immediately.
+    assert loop.state.backlog[0] == "[user request] make the voice 20% faster"
+    saved = json.loads((tmp_path / "improve-home" / "state.json").read_text(encoding="utf-8"))
+    assert saved["backlog"][0].startswith("[user request]")
+    # The next cycle implements the request (no researcher call needed).
+    entry = await loop.run_cycle()
+    assert entry.idea.startswith("[user request]")
+    assert entry.outcome == "committed"
+
+
+async def test_stall_counter_sends_the_loop_dormant_and_requests_wake_it(
+    tmp_repo: Path, tmp_path: Path
+):
+    loop = _loop(tmp_repo, tmp_path, StubLLM({}))
+    loop.config = loop.config.model_copy(update={"improve_stall_cycles": 2})
+
+    # Two fruitless cycles → diminishing returns tripped.
+    loop._stall = 2
+    assert loop._hit_diminishing_returns()
+    # A user request is the wake-up call: the dormant wait returns promptly.
+    loop._running = True
+    loop.request("do this one thing")
+    await asyncio.wait_for(loop._sleep_until_requested(), timeout=2)
+    assert loop._stall == 0
+    # A commit also resets the counter; disabled threshold never trips.
+    loop._stall = 0
+    assert not loop._hit_diminishing_returns()
+    loop.config = loop.config.model_copy(update={"improve_stall_cycles": 0})
+    loop._stall = 99
+    assert not loop._hit_diminishing_returns()
 
 
 async def test_dangerous_change_is_blocked_before_commit(tmp_repo: Path, tmp_path: Path):

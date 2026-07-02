@@ -94,6 +94,10 @@ class Config(BaseSettings):
     improve_max_cycles: int = 0          # per-session cycle cap (0 = unlimited)
     improve_home: str = "~/.eve/improve" # journal, state, sandbox worktrees
     improve_reflect_hours: float = 6.0   # min gap between memory reflections (0 = off)
+    # Diminishing-returns circuit breaker: after this many consecutive cycles
+    # without a committed improvement, the loop goes dormant until the user
+    # queues a request (via the request_improvement tool) or EVE restarts.
+    improve_stall_cycles: int = 5        # 0 = never go dormant
 
     # ── Misc ─────────────────────────────────────────────────────────────────
     log_level: str = "INFO"

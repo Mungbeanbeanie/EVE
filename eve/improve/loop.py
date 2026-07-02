@@ -81,6 +81,11 @@ class SelfImprovementLoop:
         self._session_cycles = 0
         self._status_lock = threading.Lock()
         self._phase = "off"
+        # Diminishing-returns tracking: consecutive cycles that produced no
+        # commit. Hitting config.improve_stall_cycles sends the loop dormant;
+        # a user request (request()) is the wake-up call.
+        self._stall = 0
+        self._request_event = threading.Event()
         # Waking mid-cycle uses a shorter idle bar than starting a cycle: the
         # user stepping away again briefly shouldn't stall a half-done cycle
         # for the full threshold.
@@ -120,7 +125,32 @@ class SelfImprovementLoop:
             "worktree": str(self._workspace.path) if self._workspace else None,
             "cycles_completed": self.state.cycles_completed,
             "session_cycles": self._session_cycles,
+            "cycles_since_last_commit": self._stall,
+            "pending_requests": [i for i in self.state.backlog if i.startswith("[user request]")],
             "recent": self.journal.tail(5),
+        }
+
+    def request(self, idea: str) -> dict:
+        """Queue a user-directed improvement ahead of researcher ideas.
+
+        Called from the chat thread (the `request_improvement` tool). The
+        request jumps the backlog queue, persists immediately (so a restart
+        can't lose it), resets the diminishing-returns counter, and wakes the
+        loop if it went dormant.
+        """
+        text = f"[user request] {idea.strip()}"
+        self.state.backlog.insert(0, text)
+        save_state(self.home / "state.json", self.state)
+        self.journal.note(f"user request queued — {idea.strip()}")
+        self._stall = 0
+        self._request_event.set()  # wake a dormant loop
+        return {
+            "queued": idea.strip(),
+            "position": "next idle cycle",
+            "note": (
+                "It will be attempted in a sandbox during idle time; ask for "
+                "self_improvement_status or check the journal for the outcome."
+            ),
         }
 
     def _set_phase(self, phase: str) -> None:
@@ -151,14 +181,48 @@ class SelfImprovementLoop:
                 self._set_phase("capped")
                 return
             try:
-                await self.run_cycle()
+                entry = await self.run_cycle()
+                self._stall = 0 if entry.outcome == "committed" else self._stall + 1
             except GuardrailViolation as exc:
                 self._abandon(f"guardrail: {exc}")
+                self._stall += 1
             except Exception:
                 log.exception("[improve] cycle failed")
                 self._abandon("unexpected error (see log)")
+                self._stall += 1
                 await asyncio.sleep(_ERROR_BACKOFF)
+            if self._hit_diminishing_returns():
+                await self._sleep_until_requested()
             await asyncio.sleep(_REST_SECONDS)
+
+    def _hit_diminishing_returns(self) -> bool:
+        """True when enough consecutive cycles produced nothing to commit.
+
+        Committed cycles are the loop's return signal: when they dry up, the
+        model has likely harvested the improvements it can see at this size,
+        and further cycles just burn watts. Skips, rejections, and errors all
+        count toward the stall.
+        """
+        threshold = self.config.improve_stall_cycles
+        return bool(threshold) and self._stall >= threshold
+
+    async def _sleep_until_requested(self) -> None:
+        """Go dormant until a user request arrives (or EVE restarts).
+
+        A restart also resets the counter deliberately: a new session usually
+        means new human commits on HEAD — fresh material worth another look.
+        """
+        self.journal.note(
+            f"{self._stall} cycles without a committed improvement — dormant "
+            "until a user request or restart"
+        )
+        self._set_phase("dormant")
+        # No clear() before the wait: a request that landed a moment before
+        # dormancy leaves the event set, and we wake immediately to serve it.
+        while self._running and not self._request_event.is_set():
+            await asyncio.sleep(5)
+        self._request_event.clear()
+        self._stall = 0
 
     def _abandon(self, reason: str) -> None:
         """Revert the sandbox and journal why the cycle died."""
