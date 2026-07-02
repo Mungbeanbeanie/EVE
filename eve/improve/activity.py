@@ -22,6 +22,15 @@ class ActivityMonitor:
     """Thread-safe idle clock driven by user-interaction marks."""
 
     def __init__(self) -> None:
+        """Initialize the idle-clock state.
+
+        ``_lock`` guards both counters against concurrent reads/writes from the
+        agent's event loop and the improvement daemon (which run separate asyncio
+        loops, so we use a threading lock — never an asyncio primitive).
+        ``_last_activity`` is the monotonic timestamp of the most recent user
+        touch; ``_active_turns`` tracks open conversational turns (>0 means "in
+        progress", regardless of how long ago the last touch was).
+        """
         self._lock = threading.Lock()
         self._last_activity = time.monotonic()
         self._active_turns = 0  # >0 while a conversational turn is in flight
