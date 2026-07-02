@@ -19,7 +19,7 @@ VOICE_PKGS := faster-whisper webrtcvad pyttsx3 pyaudio
 .DEFAULT_GOAL := help
 .PHONY: help setup venv install install-voice install-window env \
         run text voice window window-voice improve improve-status test lint fmt \
-        dist install-agent uninstall-agent clean clean-all
+        dist install-agent uninstall-agent update clean clean-all
 
 # Native desktop window deps (macOS): menu-bar host + WKWebView bindings.
 WINDOW_PKGS := rumps pyobjc-framework-Cocoa pyobjc-framework-WebKit pywebview
@@ -79,6 +79,13 @@ improve-status: ## Show the self-improvement journal and sandbox branches
 # ── Always-on (launchd LaunchAgent) ──────────────────────────────────────────
 install-agent: ## Install EVE as a login agent (always-on, auto-restart)
 	@deploy/install-agent.sh
+
+update: ## Restart EVE so it runs the current code (kill + relaunch in one step)
+	@launchctl kickstart -k "gui/$$(id -u)/com.eve.assistant" 2>/dev/null \
+		&& echo "🔄 EVE restarted on the current code (launchd)." \
+		|| (pkill -f "main.py --mode" \
+			&& echo "🛑 EVE stopped — not launchd-managed, start it again with your usual command." \
+			|| echo "ℹ️  EVE isn't running; just start it normally.")
 
 uninstall-agent: ## Remove the EVE login agent
 	@deploy/install-agent.sh --uninstall

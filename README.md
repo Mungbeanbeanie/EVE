@@ -323,7 +323,12 @@ git log main..self-improve/20260701-183000 --stat
 git diff main...self-improve/20260701-183000
 git merge --no-ff self-improve/20260701-183000   # onto a branch YOU choose
 git worktree remove ~/.eve/improve/worktrees/20260701-183000  # tidy up after
+make update    # restart EVE so it actually runs the merged code
 ```
+
+Merged code does **not** take effect until EVE restarts (Python imports once at
+startup) — `make update` is the one-step kill-and-relaunch, via launchd when EVE
+is installed as a login agent.
 
 ```
 eve/improve/
